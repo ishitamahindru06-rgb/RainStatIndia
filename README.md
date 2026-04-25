@@ -4,7 +4,7 @@ A fully interactive, web application for analyzing India's rainfall patterns, se
 
 CHE110 Course Project | Built with HTML, CSS & JavaScript
 🚀 Live Demo
-🔗 [View Live Site](https://ishitamahindru06-rgb.github.io/RainStatIndia)
+🔗 [View Live Site](https://rainstat-india.netlify.app/)
 
 📌 Features
 

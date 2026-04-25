@@ -1,6 +1,6 @@
 # RainStatIndia
 RainStat India — Rainfall Trend &amp; Variability Analyzer
-A fully interactive, web application for analyzing India's rainfall patterns, seasonal trends, and historical variability across all 28 states.
+A fully interactive, web application for analyzing India's rainfall patterns, seasonal trends, and historical variability across all 28 states along with their districts.
 
 CHE110 Course Project | Built with HTML, CSS & JavaScript
 
@@ -33,4 +33,4 @@ Rainfall values are based on open repositories , Long Period Averages (1951–20
 📊 Comparison Mode — Side-by-side comparison of two states' rainfall patterns simultaneously
 
 📄 License
-This project is submitted as part of the CHE110 course curriculum. All rights reserved by the author.
+This project is submitted as part of the CHE110 course curriculum. All rights are reserved.

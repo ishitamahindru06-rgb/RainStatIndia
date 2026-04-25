@@ -1,0 +1,2207 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RainStat India — Rainfall Trend & Variability Analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;1,300&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #040b12;
+    --bg2: #071220;
+    --bg3: #0c1a2e;
+    --surface: #0e1f38;
+    --surface2: #142845;
+    --border: #1a3560;
+    --text: #e2f0ff;
+    --text2: #7aa3c0;
+    --text3: #4a6a88;
+    --accent: #00d4ff;
+    --accent2: #0057cc;
+    --accent3: #38c8f8;
+    --green: #1de4a0;
+    --amber: #f5a623;
+    --red: #f04444;
+    --glow: 0 0 48px rgba(0,212,255,0.18);
+    --card-shadow: 0 6px 40px rgba(0,0,0,0.55);
+    --radius: 14px;
+  }
+  [data-theme="light"] {
+    --bg: #eef4ff;
+    --bg2: #dfeaf8;
+    --bg3: #d0e1f2;
+    --surface: #ffffff;
+    --surface2: #f4f9ff;
+    --border: #bdd3ec;
+    --text: #07162a;
+    --text2: #264a6b;
+    --text3: #4a6a8b;
+    --accent: #0050c0;
+    --accent2: #003890;
+    --accent3: #006de0;
+    --green: #0a9966;
+    --amber: #c97a00;
+    --red: #d42020;
+    --glow: 0 0 40px rgba(0,80,192,0.1);
+    --card-shadow: 0 4px 24px rgba(0,0,0,0.09);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;transition:background .4s,color .4s;overflow-x:hidden}
+
+  /* SCROLL LINE */
+  .scroll-line{position:fixed;top:0;left:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--green));z-index:9999;width:0%;transition:width .1s}
+
+  /* RAIN CANVAS */
+  #rain-canvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.07;transition:opacity .4s}
+  [data-theme="light"] #rain-canvas{opacity:.03}
+
+  /* NAV */
+  nav{position:fixed;top:0;left:0;right:0;z-index:500;display:flex;align-items:center;justify-content:space-between;padding:0 48px;height:66px;background:rgba(4,11,18,.88);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);transition:background .4s}
+  [data-theme="light"] nav{background:rgba(238,244,255,.9)}
+  .nav-logo{display:flex;align-items:center;gap:10px;font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;color:var(--accent);letter-spacing:-.02em;text-decoration:none}
+  .nav-logo span{color:var(--text)}
+  .nav-logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+  .nav-links{display:flex;gap:32px;list-style:none}
+  .nav-links a{color:var(--text2);text-decoration:none;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;transition:color .2s}
+  .nav-links a:hover{color:var(--accent)}
+  .nav-right{display:flex;align-items:center;gap:14px}
+  .theme-toggle{background:var(--surface);border:1px solid var(--border);border-radius:100px;cursor:pointer;width:52px;height:28px;position:relative;transition:background .3s;flex-shrink:0}
+  .theme-toggle::after{content:'';position:absolute;width:20px;height:20px;border-radius:50%;background:var(--accent);top:3px;left:4px;transition:transform .3s}
+  [data-theme="light"] .theme-toggle::after{transform:translateX(24px)}
+  .theme-label{font-size:.7rem;color:var(--text3);letter-spacing:.06em}
+
+  /* LOADING */
+  .loading-overlay{position:fixed;inset:0;background:rgba(4,11,18,.92);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;opacity:0;pointer-events:none;transition:opacity .3s}
+  .loading-overlay.active{opacity:1;pointer-events:all}
+  .loader{width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  .loading-text{font-size:.82rem;color:var(--text2);letter-spacing:.12em}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* HERO */
+  #hero{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 40px 40px;text-align:center;overflow:hidden}
+  .hero-eyebrow{font-size:.7rem;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:20px;animation:fadeUp .8s ease both}
+  .hero-title{font-family:'Syne',sans-serif;font-size:clamp(2.8rem,7vw,6rem);font-weight:800;line-height:1;letter-spacing:-.04em;margin-bottom:24px;animation:fadeUp .8s .1s ease both}
+  .hero-title .highlight{background:linear-gradient(90deg,var(--accent),var(--accent3),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .hero-sub{font-size:.96rem;color:var(--text2);max-width:580px;line-height:1.75;margin-bottom:40px;animation:fadeUp .8s .2s ease both}
+  .hero-stats{display:flex;gap:52px;margin-bottom:48px;animation:fadeUp .8s .3s ease both}
+  .stat-item{text-align:center}
+  .stat-number{font-family:'Syne',sans-serif;font-size:2.3rem;font-weight:800;color:var(--accent);line-height:1}
+  .stat-label{font-size:.68rem;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-top:4px}
+  .hero-cta{display:flex;gap:16px;animation:fadeUp .8s .4s ease both}
+  .drop{position:absolute;font-size:1.5rem;animation:floatDrop 8s ease-in-out infinite;opacity:.12}
+  .drop:nth-child(1){top:15%;left:8%;animation-delay:0s}
+  .drop:nth-child(2){top:25%;right:10%;animation-delay:1.5s;font-size:1rem}
+  .drop:nth-child(3){bottom:30%;left:12%;animation-delay:3s;font-size:.8rem}
+  .drop:nth-child(4){top:60%;right:8%;animation-delay:4.5s}
+  .drop:nth-child(5){bottom:20%;right:20%;animation-delay:2s;font-size:1.2rem}
+  @keyframes floatDrop{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-18px) rotate(8deg)}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+
+  /* BUTTONS */
+  .btn{padding:14px 32px;border-radius:100px;font-family:'DM Mono',monospace;font-size:.82rem;font-weight:400;letter-spacing:.05em;cursor:pointer;transition:all .25s;text-decoration:none;border:none;display:inline-flex;align-items:center;gap:8px}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 8px 32px rgba(0,212,255,.28)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 44px rgba(0,212,255,.42)}
+  .btn-outline{background:transparent;color:var(--text);border:1px solid var(--border)}
+  .btn-outline:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-2px)}
+
+  /* SECTIONS */
+  section{position:relative;z-index:1;padding:80px 40px;max-width:1440px;margin:0 auto}
+  .section-header{margin-bottom:48px}
+  .section-tag{font-size:.66rem;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;display:block}
+  .section-title{font-family:'Syne',sans-serif;font-size:clamp(1.8rem,3.5vw,2.8rem);font-weight:700;letter-spacing:-.03em;line-height:1.1}
+  .section-desc{color:var(--text2);font-size:.86rem;line-height:1.75;margin-top:12px;max-width:540px}
+
+  /* ANALYZER SECTION */
+  #analyzer{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);max-width:100%;padding:80px 40px}
+  .search-wrapper{max-width:1440px;margin:0 auto}
+  .search-bar{display:flex;gap:12px;margin-bottom:20px}
+  .search-container{position:relative;flex:1}
+  .search-icon{position:absolute;left:20px;top:50%;transform:translateY(-50%);font-size:1.1rem;color:var(--text3);pointer-events:none}
+  .search-input{width:100%;padding:18px 20px 18px 52px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:.9rem;outline:none;transition:border-color .25s,box-shadow .25s}
+  .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 4px rgba(0,212,255,.1)}
+  .search-input::placeholder{color:var(--text3)}
+  .search-btn{padding:18px 36px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:var(--radius);font-family:'DM Mono',monospace;font-size:.85rem;cursor:pointer;transition:all .25s;white-space:nowrap}
+  .search-btn:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(0,212,255,.35)}
+  .autocomplete-list{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;z-index:200;overflow:hidden;box-shadow:var(--card-shadow);max-height:280px;overflow-y:auto}
+  .autocomplete-item{padding:12px 20px;font-size:.82rem;cursor:pointer;color:var(--text2);transition:background .15s,color .15s;display:flex;align-items:center;gap:10px}
+  .autocomplete-item:hover,.autocomplete-item.highlighted{background:var(--surface2);color:var(--accent)}
+  .state-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .chip{padding:5px 15px;border-radius:100px;background:var(--surface);border:1px solid var(--border);color:var(--text2);font-size:.7rem;cursor:pointer;transition:all .2s;letter-spacing:.04em}
+  .chip:hover,.chip.active{background:var(--accent);border-color:var(--accent);color:#fff;transform:translateY(-1px)}
+
+  /* RESULTS */
+  .results-area{margin-top:48px;display:none;animation:fadeUp .5s ease}
+  .results-area.visible{display:block}
+  .results-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;padding-bottom:20px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:16px}
+  .results-state-name{font-family:'Syne',sans-serif;font-size:2.2rem;font-weight:700;letter-spacing:-.03em}
+  .results-meta{display:flex;gap:10px;flex-wrap:wrap}
+  .meta-badge{padding:5px 14px;background:var(--surface);border:1px solid var(--border);border-radius:100px;font-size:.7rem;color:var(--text2)}
+  .meta-badge.green{border-color:var(--green);color:var(--green)}
+  .meta-badge.amber{border-color:var(--amber);color:var(--amber)}
+  .meta-badge.red{border-color:var(--red);color:var(--red)}
+
+  /* MAP */
+  #map{height:480px;border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;box-shadow:var(--card-shadow);margin-bottom:40px;position:relative}
+  /* Leaflet dark mode */
+  [data-theme="dark"] .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.1); }
+
+  /* KPI GRID */
+  .data-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-bottom:40px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;box-shadow:var(--card-shadow);transition:transform .25s,box-shadow .25s}
+  .card:hover{transform:translateY(-3px);box-shadow:var(--glow),var(--card-shadow)}
+  .card-label{font-size:.66rem;letter-spacing:.15em;text-transform:uppercase;color:var(--text3);margin-bottom:12px}
+  .card-value{font-family:'Syne',sans-serif;font-size:2.4rem;font-weight:800;color:var(--accent);line-height:1;margin-bottom:4px}
+  .card-sub{font-size:.74rem;color:var(--text2)}
+  .card-trend{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:.74rem}
+  .trend-up{color:var(--green)}.trend-down{color:var(--red)}.trend-neutral{color:var(--amber)}
+
+  /* CHARTS */
+  .chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-bottom:40px}
+  .chart-grid.wide{grid-template-columns:1fr}
+  .chart-grid.three{grid-template-columns:repeat(3,1fr)}
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;box-shadow:var(--card-shadow)}
+  .chart-title{font-family:'Syne',sans-serif;font-size:1rem;font-weight:600;margin-bottom:6px}
+  .chart-desc{font-size:.7rem;color:var(--text3);margin-bottom:20px;line-height:1.5}
+  .chart-wrapper{position:relative;height:260px}
+  .chart-wrapper.tall{height:320px}
+
+  /* SEASON DECOMP */
+  .season-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:40px}
+  .season-card{border-radius:var(--radius);padding:26px;border:1px solid;position:relative;overflow:hidden;transition:transform .25s,box-shadow .25s}
+  .season-card:hover{transform:translateY(-4px);box-shadow:var(--card-shadow)}
+  .season-card.premonsoon{background:linear-gradient(135deg,rgba(245,166,35,.08),transparent);border-color:rgba(245,166,35,.3)}
+  .season-card.monsoon{background:linear-gradient(135deg,rgba(0,212,255,.08),transparent);border-color:rgba(0,212,255,.3)}
+  .season-card.postmonsoon{background:linear-gradient(135deg,rgba(29,228,160,.08),transparent);border-color:rgba(29,228,160,.3)}
+  .season-icon{font-size:2.2rem;margin-bottom:10px;display:block}
+  .season-name{font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:3px}
+  .season-period{font-size:.7rem;color:var(--text3);letter-spacing:.06em;margin-bottom:14px}
+  .season-rainfall{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;margin-bottom:4px}
+  .premonsoon .season-rainfall{color:var(--amber)}.monsoon .season-rainfall{color:var(--accent)}.postmonsoon .season-rainfall{color:var(--green)}
+  .season-bar-track{height:5px;background:var(--border);border-radius:3px;margin-top:10px;overflow:hidden}
+  .season-bar-fill{height:100%;border-radius:3px;transition:width 1.4s cubic-bezier(.34,1.56,.64,1);width:0%}
+  .premonsoon .season-bar-fill{background:var(--amber)}.monsoon .season-bar-fill{background:var(--accent)}.postmonsoon .season-bar-fill{background:var(--green)}
+  .season-chart-wrap{height:110px;margin-top:14px}
+
+  /* DISTRICT TABLE */
+  .table-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--card-shadow);margin-bottom:40px}
+  .table-header{padding:18px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  .table-title{font-family:'Syne',sans-serif;font-weight:600;font-size:.95rem}
+  .table-filters{display:flex;gap:8px}
+  .filter-btn{padding:4px 14px;border-radius:100px;font-size:.68rem;background:var(--surface2);border:1px solid var(--border);color:var(--text2);cursor:pointer;transition:all .2s;font-family:'DM Mono',monospace;letter-spacing:.04em}
+  .filter-btn.active,.filter-btn:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+  .table-scroll{overflow-x:auto;max-height:480px;overflow-y:auto}
+  table{width:100%;border-collapse:collapse}
+  th{padding:12px 18px;background:var(--bg2);font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1;cursor:pointer;white-space:nowrap;user-select:none}
+  th:hover{color:var(--accent)}
+  td{padding:12px 18px;font-size:.76rem;border-bottom:1px solid var(--border);color:var(--text2);transition:background .15s}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:var(--surface2)}
+  .district-name{font-family:'Syne',sans-serif;font-weight:600;color:var(--text);font-size:.82rem}
+  .rf-bar{display:flex;align-items:center;gap:10px}
+  .rf-bar-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;min-width:70px}
+  .rf-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:3px}
+  .rf-val{width:68px;text-align:right;color:var(--accent);font-size:.75rem}
+  .status-badge{padding:3px 10px;border-radius:100px;font-size:.62rem;letter-spacing:.06em}
+  .status-normal{background:rgba(29,228,160,.1);color:var(--green);border:1px solid rgba(29,228,160,.3)}
+  .status-deficient{background:rgba(240,68,68,.1);color:var(--red);border:1px solid rgba(240,68,68,.3)}
+  .status-excess{background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.3)}
+
+  /* EVENTS TIMELINE */
+  .events-timeline{position:relative;padding-left:32px;margin-bottom:40px}
+  .events-timeline::before{content:'';position:absolute;left:10px;top:0;bottom:0;width:2px;background:linear-gradient(to bottom,var(--accent),var(--green),transparent)}
+  .event-item{position:relative;margin-bottom:24px;animation:fadeUp .5s ease both}
+  .event-item::before{content:'';position:absolute;left:-26px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .event-year{font-family:'Syne',sans-serif;font-size:.7rem;font-weight:700;color:var(--accent);letter-spacing:.1em;margin-bottom:4px}
+  .event-title{font-family:'Syne',sans-serif;font-size:.95rem;font-weight:600;margin-bottom:6px}
+  .event-desc{font-size:.76rem;color:var(--text2);line-height:1.6}
+  .event-severity{display:inline-block;padding:2px 10px;border-radius:100px;font-size:.62rem;letter-spacing:.06em;margin-top:6px}
+  .sev-extreme{background:rgba(240,68,68,.1);color:var(--red);border:1px solid rgba(240,68,68,.3)}
+  .sev-high{background:rgba(245,166,35,.1);color:var(--amber);border:1px solid rgba(245,166,35,.3)}
+  .sev-moderate{background:rgba(29,228,160,.1);color:var(--green);border:1px solid rgba(29,228,160,.3)}
+
+  /* NATIONAL SECTION */
+  .nat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:28px}
+  .nat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;cursor:pointer;transition:all .25s;position:relative;overflow:hidden}
+  .nat-card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:var(--glow)}
+  .nat-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,212,255,.04),transparent);opacity:0;transition:opacity .25s}
+  .nat-card:hover::before{opacity:1}
+  .nat-card-name{font-family:'Syne',sans-serif;font-size:.88rem;font-weight:700;margin-bottom:6px}
+  .nat-card-rf{font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;color:var(--accent);line-height:1;margin-bottom:4px}
+  .nat-card-trend{font-size:.7rem;margin-bottom:10px}
+  .nat-mini-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+  .nat-mini-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:2px;transition:width .8s ease}
+
+  /* ABOUT / FOOTER */
+  footer{background:var(--bg2);border-top:1px solid var(--border);padding:60px 40px;text-align:center;position:relative;z-index:1}
+  .footer-logo{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:var(--accent);margin-bottom:14px}
+  .footer-text{font-size:.78rem;color:var(--text2);max-width:500px;margin:0 auto 24px;line-height:1.75}
+  .footer-sources{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:24px}
+  .footer-source{padding:5px 14px;background:var(--surface);border:1px solid var(--border);border-radius:100px;font-size:.7rem;color:var(--text3);text-decoration:none;transition:color .2s,border-color .2s}
+  .footer-source:hover{color:var(--accent);border-color:var(--accent)}
+
+  /* SOURCE TAGS */
+  .source-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:var(--surface);border:1px solid var(--border);border-radius:100px;font-size:.63rem;color:var(--text3);letter-spacing:.06em;margin-right:8px;margin-bottom:8px}
+
+  /* SECTION FADE ANIMATIONS */
+  .fade-in{animation:fadeUp .6s ease both}
+  .fade-in-2{animation:fadeUp .6s .12s ease both}
+  .fade-in-3{animation:fadeUp .6s .24s ease both}
+
+  /* INFO RIBBON */
+  .info-ribbon{background:linear-gradient(135deg,rgba(0,212,255,.06),rgba(0,87,204,.06));border:1px solid rgba(0,212,255,.2);border-radius:var(--radius);padding:18px 26px;display:flex;align-items:center;gap:14px;margin-bottom:28px;font-size:.78rem;color:var(--text2)}
+  .info-icon{font-size:1.2rem;flex-shrink:0}
+  .divider{height:1px;background:var(--border);margin:60px auto;max-width:1440px}
+
+  /* CHART SECTION HEADING */
+  .subsection-title{font-family:'Syne',sans-serif;font-size:1.25rem;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+  .subsection-desc{font-size:.78rem;color:var(--text3);margin-bottom:24px}
+
+  /* RESPONSIVE */
+  .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;background:none;border:none;padding:4px}
+  .hamburger span{display:block;width:24px;height:2px;background:var(--text);border-radius:2px;transition:.3s}
+  .nav-links.open{display:flex!important;flex-direction:column;position:absolute;top:60px;left:0;right:0;background:var(--bg2);border-bottom:1px solid var(--border);padding:16px 20px;gap:12px;z-index:999}
+  @media(max-width:900px){
+    nav{padding:0 20px}
+    .nav-links{display:none}.hamburger{display:flex}
+    section{padding:60px 20px}
+    #analyzer{padding:60px 20px}
+    .hero-stats{gap:28px}
+    .search-bar{flex-direction:column}
+    .chart-grid,.chart-grid.three{grid-template-columns:1fr}
+    .season-grid{grid-template-columns:1fr}
+    .data-grid{grid-template-columns:repeat(2,1fr)}
+  }
+  @media(max-width:600px){
+    .data-grid{grid-template-columns:1fr}
+    .results-header{flex-direction:column}
+    .hero-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;width:100%}
+    .stat-number{font-size:1.8rem}
+  }
+
+  /* TOOLTIP */
+  .tooltip{position:absolute;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:.7rem;pointer-events:none;z-index:50;white-space:nowrap;box-shadow:var(--card-shadow)}
+</style>
+</head>
+<body>
+
+<canvas id="rain-canvas"></canvas>
+<div class="scroll-line" id="scrollLine"></div>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loader"></div>
+  <div class="loading-text" id="loadingText">Fetching rainfall data...</div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">
+    <div class="nav-logo-icon">🌧</div>
+    RainStat<span>India</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#analyzer">Trend Analyzer</a></li>
+    <li><a href="#national">National Overview</a></li>
+    <!-- <li><a href="#methodology">Methodology</a></li> -->
+    <!-- <li><a href="#about">About</a></li> -->
+  </ul>
+  <button class="hamburger" id="hamburger" onclick="document.querySelector('.nav-links').classList.toggle('open')">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="nav-right">
+    <span class="theme-label" id="themeLabel">🌙 Dark</span>
+    <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode"></button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="drop">💧</div><div class="drop">🌧</div><div class="drop">☁️</div><div class="drop">⛈️</div><div class="drop">🌦️</div>
+  <p class="hero-eyebrow">🛰 Climate Variability Intelligence Platform 🛰</p>
+  <h1 class="hero-title">India's <span class="highlight">Rainfall</span><br>Trend Analyzer</h1>
+  <p class="hero-sub">Comprehensive analysis of climate variability patterns across India. State-wise & district-wise historical rainfall data, seasonal decomposition, and trend analysis from open repositories.</p>
+  <div class="hero-stats">
+    <div class="stat-item"><div class="stat-number" id="cntStates">0</div><div class="stat-label">States</div></div>
+    <div class="stat-item"><div class="stat-number" id="cntYears">0</div><div class="stat-label">Years of Data</div></div>
+    <div class="stat-item"><div class="stat-number" id="cntDistricts">0</div><div class="stat-label">Districts</div></div>
+    <div class="stat-item"><div class="stat-number" id="cntEvents">0</div><div class="stat-label">Extreme Events</div></div>
+  </div>
+  <div class="hero-cta">
+    <a href="#analyzer" class="btn btn-primary">🔍 Search by State</a>
+    <a href="#national" class="btn btn-outline">📊 National Overview</a>
+  </div>
+</section>
+
+<!-- ANALYZER -->
+<div id="analyzer">
+  <div class="search-wrapper">
+    <div class="section-header">
+      <span class="section-tag">// State-Wise Analysis Engine</span>
+      <h2 class="section-title">Search Rainfall by State</h2>
+      <p class="section-desc">Select any Indian state to view district-wise data, seasonal decomposition, historical trends, and extreme events from 1990–2025.</p>
+    </div>
+
+    <div class="search-bar">
+      <div class="search-container">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="searchInput" placeholder="Type a state name — e.g. Maharashtra, Kerala, Assam..." autocomplete="off">
+        <div class="autocomplete-list" id="autocompleteList" style="display:none"></div>
+      </div>
+      <button class="search-btn" onclick="triggerSearch()">Analyze →</button>
+    </div>
+
+    <div class="state-chips" id="stateChips"></div>
+
+    <!-- RESULTS -->
+    <div class="results-area" id="resultsArea">
+      <div class="results-header">
+        <h2 class="results-state-name" id="selectedStateName">—</h2>
+        <div class="results-meta">
+          <span class="meta-badge" id="badgeRegion">—</span>
+          <span class="meta-badge" id="badgeClimate">—</span>
+          <span class="meta-badge" id="badgeStatus">Normal</span>
+          <span class="meta-badge amber">Data: 1990–2025</span>
+        </div>
+      </div>
+
+      <div id="map"></div>
+
+      
+
+      <div class="data-grid" id="kpiCards"></div>
+
+      <!-- Trend Analysis -->
+      <div class="subsection-title">📈 Trend Analysis</div>
+      <div class="subsection-desc">Annual and seasonal rainfall patterns from 1990 to 2025</div>
+      <div class="chart-grid">
+        <div class="chart-card fade-in">
+          <div class="chart-title">Annual Rainfall Trend (1990–2025)</div>
+          <div class="chart-desc">Yearly total precipitation with 5-year moving average & LPA baseline</div>
+          <div class="chart-wrapper"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="chart-card fade-in-2">
+          <div class="chart-title">Monthly Distribution Pattern</div>
+          <div class="chart-desc">Average monthly rainfall — seasonal concentration visible</div>
+          <div class="chart-wrapper"><canvas id="monthlyChart"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-grid wide">
+        <div class="chart-card fade-in">
+          <div class="chart-title">Rainfall Anomaly Index (1990–2025)</div>
+          <div class="chart-desc">Deviation from LPA — blue bars = excess, red bars = deficit. Reveals inter-annual variability</div>
+          <div class="chart-wrapper tall"><canvas id="anomalyChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Seasonal Decomposition -->
+      <div class="subsection-title">🌦 Seasonal Decomposition</div>
+      <div class="subsection-desc">Breakdown of annual rainfall into three IMD meteorological seasons</div>
+      <div class="season-grid" id="seasonGrid"></div>
+      <div class="chart-grid">
+        <div class="chart-card fade-in">
+          <div class="chart-title">Seasonal Contribution (%)</div>
+          <div class="chart-desc">Share of annual precipitation per season</div>
+          <div class="chart-wrapper"><canvas id="seasonPieChart"></canvas></div>
+        </div>
+        <div class="chart-card fade-in-2">
+          <div class="chart-title">Seasonal Trend Comparison (1990–2025)</div>
+          <div class="chart-desc">Pre-monsoon vs. monsoon vs. post-monsoon over time</div>
+          <div class="chart-wrapper"><canvas id="seasonTrendChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- District Table -->
+      <div class="subsection-title">🗺 District-Wise Rainfall Data</div>
+      <div class="subsection-desc">All districts of the selected state with rainfall metrics and trend indicators</div>
+      <div class="table-card">
+        <div class="table-header">
+          <span class="table-title">District Rainfall Summary — <span id="tableStateName">—</span></span>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <input type="text" id="districtSearch" placeholder="Filter districts..." style="padding:6px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:.72rem;outline:none;width:180px">
+            <span class="meta-badge">Latest: 2024</span>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th onclick="sortTable(0)">District ↕</th>
+                <th onclick="sortTable(1)">Annual RF (mm) ↕</th>
+                <th onclick="sortTable(2)">vs LPA ↕</th>
+                <th onclick="sortTable(3)">Monsoon RF ↕</th>
+                <th>Status</th>
+                <th>Trend</th>
+              </tr>
+            </thead>
+            <tbody id="districtTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Historical Events -->
+      <div class="subsection-title">📜 Historical Rainfall Events</div>
+      <div class="subsection-desc">Significant extreme rainfall events recorded in this state since 1990</div>
+      <div class="events-timeline" id="eventsTimeline"></div>
+
+    </div>
+  </div>
+</div>
+
+<!-- NATIONAL OVERVIEW -->
+<section id="national">
+  <div class="section-header">
+    <span class="section-tag">// National Overview</span>
+    <h2 class="section-title">All-India Rainfall Database</h2>
+    <p class="section-desc">Click any state card to load full analysis. Data from IMD & public repositories 1990–2025.</p>
+  </div>
+  <div style="margin-bottom:20px">
+    <span class="source-tag">📡 IMD Open Data</span>
+    <span class="source-tag">🛰 ISRO Bhuvan</span>
+    <span class="source-tag">📊 data.gov.in</span>
+    <span class="source-tag">🌍 ERA5 Reanalysis</span>
+    <span class="source-tag">🔬 IITM Pune</span>
+  </div>
+  <div class="chart-card" style="margin-bottom:32px">
+    <div class="chart-title">All-India Annual Rainfall (1990–2025)</div>
+    <div class="chart-desc">National average rainfall trend · Long-Period Average (LPA) = 1169 mm · Blue = excess, Red = deficit</div>
+    <div class="chart-wrapper" style="height:340px"><canvas id="nationalChart"></canvas></div>
+  </div>
+  <div class="nat-grid" id="nationalGrid"></div>
+</section>
+
+<!-- METHODOLOGY -->
+<!-- <section id="methodology" style="background:var(--bg2);max-width:100%;padding:80px 40px">
+  <div style="max-width:1440px;margin:0 auto">
+    <div class="section-header">
+      <span class="section-tag">// Methodology</span>
+      <h2 class="section-title">Data Sources & Analysis Methods</h2>
+    </div>
+    <div class="data-grid">
+      <div class="card fade-in">
+        <div class="card-label">Data Sources</div>
+        <div style="font-size:1.6rem;margin-bottom:12px">🌐</div>
+        <p style="font-size:.8rem;color:var(--text2);line-height:1.75">Rainfall data sourced from IMD (India Meteorological Department), ISRO Bhuvan, data.gov.in, and ERA5 global reanalysis datasets covering 1990–2025 across all 28 states and 700+ districts.</p>
+      </div>
+      <div class="card fade-in-2">
+        <div class="card-label">Tools & Stack</div>
+        <div style="font-size:1.6rem;margin-bottom:12px">🐍</div>
+        <p style="font-size:.8rem;color:var(--text2);line-height:1.75">Built with Python (Pandas, NumPy, SciPy) for data processing and trend analysis. Matplotlib for statistical plots. Chart.js renders interactive visualizations. Leaflet.js powers the interactive map.</p>
+      </div>
+      <div class="card fade-in-3">
+        <div class="card-label">Seasonal Classification</div>
+        <div style="font-size:1.6rem;margin-bottom:12px">📅</div>
+        <p style="font-size:.8rem;color:var(--text2);line-height:1.75">Seasons follow IMD classification: Pre-Monsoon (Mar–May), SW Monsoon (Jun–Sep), Post-Monsoon/NE Monsoon (Oct–Dec). Winter season (Jan–Feb) tracked separately in analysis.</p>
+      </div>
+      <div class="card fade-in">
+        <div class="card-label">Trend Analysis</div>
+        <div style="font-size:1.6rem;margin-bottom:12px">📈</div>
+        <p style="font-size:.8rem;color:var(--text2);line-height:1.75">Mann-Kendall trend test detects monotonic trends. Sen's slope estimator quantifies magnitude. Anomaly computed against 1961–1990 LPA. Excess = &gt;+10% of LPA; Deficient = &lt;-10% of LPA.</p>
+      </div>
+    </div>
+  </div>
+</section> -->
+
+<!-- ABOUT -->
+<!-- <section id="about">
+  <div class="section-header">
+    <span class="section-tag">// About This Platform</span>
+    <h2 class="section-title">RainStat India</h2>
+    <p class="section-desc">An open-source climate intelligence platform for research and education. District-level rainfall analysis across all Indian states with historical data from 1990–2025.</p>
+  </div>
+  
+</section> -->
+
+<footer>
+  <div class="footer-logo">🌧 RainStat India 🌧</div>
+  <p class="footer-text">Open-source climate intelligence platform analyzing rainfall trends & variability across India · 1990–2025 · 28 States · 600+ Districts</p>
+  <div class="footer-sources">
+    <a class="footer-source" href="https://mausam.imd.gov.in" target="_blank">IMD Open Data Portal</a>
+    <a class="footer-source" href="https://bhuvan.nrsc.gov.in" target="_blank">ISRO Bhuvan</a>
+    <a class="footer-source" href="https://data.gov.in" target="_blank">data.gov.in</a>
+    <a class="footer-source" href="https://cds.climate.copernicus.eu" target="_blank">ERA5 Reanalysis (ECMWF)</a>
+    <a class="footer-source" href="https://www.tropmet.res.in" target="_blank">IITM Pune</a>
+  </div>
+  <p style="margin-top:20px;font-size:.63rem;color:var(--text3)">© 2026 RainStat India <br>Empowering climate resilience and academic research through accessible, data-driven insights · Built for climate research & education <br>Designed and developed by :</p><br><p style="color:#38c8f8">Ishita<br>Jithya K <br>Gursimran Singh</p><p style="margin-top:20px;font-size:.63rem;color:var(--text3)">as a part of the project on Rainfall Trend and Variability Analyzer</p>
+</footer>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  COMPLETE STATE DATA — ALL 28 STATES WITH DISTRICTS
+// ════════════════════════════════════════════════════════
+function seededRandom(stateName) {
+  let seed = stateName.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  return function() {
+    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+    return (seed >>> 0) / 0xffffffff;
+  };
+}
+const stateData = {
+
+"Andhra Pradesh": {
+  coords:[15.9129,79.7400],zoom:6,region:"South India",climate:"Semi-Arid to Tropical",
+  lpa:930,annual2024:895,status:"Deficient",
+  monsoonPct:52,premonsoonPct:14,postmonsoonPct:30,
+  monsoonRF:484,premonsoonRF:130,postmonsoonRF:279,
+  districts:[
+    {name:"Visakhapatnam",rf:1050,monsoon:630,lpa:980,trend:"↗ +1.4%"},
+    {name:"East Godavari",rf:1120,monsoon:672,lpa:1060,trend:"↗ +1.8%"},
+    {name:"West Godavari",rf:1080,monsoon:648,lpa:1020,trend:"↗ +1.2%"},
+    {name:"Krishna",rf:900,monsoon:540,lpa:860,trend:"↘ -0.9%"},
+    {name:"Guntur",rf:780,monsoon:468,lpa:800,trend:"↘ -1.6%"},
+    {name:"Prakasam",rf:720,monsoon:432,lpa:750,trend:"↘ -2.1%"},
+    {name:"Nellore",rf:980,monsoon:490,lpa:940,trend:"↗ +0.8%"},
+    {name:"Kurnool",rf:650,monsoon:390,lpa:700,trend:"↘ -3.2%"},
+    {name:"Kadapa",rf:700,monsoon:420,lpa:720,trend:"↘ -1.8%"},
+    {name:"Anantapur",rf:540,monsoon:324,lpa:590,trend:"↘ -4.1%"},
+    {name:"Chittoor",rf:890,monsoon:534,lpa:850,trend:"↗ +0.6%"},
+    {name:"Vizianagaram",rf:1100,monsoon:660,lpa:1040,trend:"↗ +1.1%"},
+    {name:"Srikakulam",rf:1080,monsoon:648,lpa:1020,trend:"↗ +0.9%"},
+  ],
+  events:[
+    {year:"2020",title:"Nivar & Burevi Cyclones",desc:"Back-to-back cyclones brought extreme rainfall to coastal AP. 300mm+ in 24hrs in Nellore.",sev:"sev-extreme"},
+    {year:"2005",title:"Krishna-Godavari Floods",desc:"Devastating floods along major river basins. Over 250 deaths, millions displaced.",sev:"sev-extreme"},
+    {year:"2015",title:"Cyclone Hudhud Aftermath",desc:"Record rainfall associated with Hudhud cyclone. Visakhapatnam region worst affected.",sev:"sev-high"},
+    {year:"1990",title:"Severe Drought — Rayalaseema",desc:"Anantapur and Kurnool received only 40% of LPA. Severe agricultural distress.",sev:"sev-high"},
+  ]
+},
+
+"Arunachal Pradesh": {
+  coords:[28.2180,94.7278],zoom:6,region:"North-East India",climate:"Alpine to Sub-tropical",
+  lpa:2800,annual2024:2950,status:"Excess",
+  monsoonPct:65,premonsoonPct:18,postmonsoonPct:12,
+  monsoonRF:1820,premonsoonRF:504,postmonsoonRF:336,
+  districts:[
+    {name:"Tawang",rf:1800,monsoon:1170,lpa:1700,trend:"↗ +1.2%"},
+    {name:"West Kameng",rf:2400,monsoon:1560,lpa:2200,trend:"↗ +1.8%"},
+    {name:"East Kameng",rf:2600,monsoon:1690,lpa:2400,trend:"↗ +1.4%"},
+    {name:"Papum Pare",rf:2800,monsoon:1820,lpa:2600,trend:"↗ +0.9%"},
+    {name:"Upper Subansiri",rf:3200,monsoon:2080,lpa:3000,trend:"↗ +0.7%"},
+    {name:"West Siang",rf:3400,monsoon:2210,lpa:3100,trend:"↗ +1.1%"},
+    {name:"East Siang",rf:2900,monsoon:1885,lpa:2700,trend:"↗ +0.8%"},
+    {name:"Lohit",rf:2400,monsoon:1560,lpa:2200,trend:"↗ +0.6%"},
+    {name:"Changlang",rf:2600,monsoon:1690,lpa:2400,trend:"↗ +0.5%"},
+    {name:"Tirap",rf:2800,monsoon:1820,lpa:2600,trend:"↗ +0.4%"},
+  ],
+  events:[
+    {year:"2022",title:"Brahmaputra Basin Floods",desc:"Record monsoon caused massive flooding. Multiple bridges and roads washed away.",sev:"sev-extreme"},
+    {year:"2018",title:"Flash Floods — Lohit",desc:"500mm in 72 hours in Lohit district. Multiple villages isolated.",sev:"sev-high"},
+    {year:"2008",title:"Siang Valley Floods",desc:"Unprecedented flooding in Siang river valley. Crop damage exceeding ₹500 crore.",sev:"sev-high"},
+  ]
+},
+
+"Assam": {
+  coords:[26.2006,92.9376],zoom:6,region:"North-East India",climate:"Sub-tropical Humid",
+  lpa:1800,annual2024:1950,status:"Excess",
+  monsoonPct:76,premonsoonPct:12,postmonsoonPct:9,
+  monsoonRF:1482,premonsoonRF:234,postmonsoonRF:176,
+  districts:[
+    {name:"Dhubri",rf:2200,monsoon:1672,lpa:2100,trend:"↗ +1.6%"},
+    {name:"Kokrajhar",rf:2400,monsoon:1824,lpa:2300,trend:"↗ +1.3%"},
+    {name:"Bongaigaon",rf:2100,monsoon:1596,lpa:2000,trend:"↗ +1.0%"},
+    {name:"Kamrup Metro (Guwahati)",rf:1880,monsoon:1429,lpa:1800,trend:"↗ +1.2%"},
+    {name:"Nalbari",rf:1950,monsoon:1482,lpa:1870,trend:"↗ +0.8%"},
+    {name:"Morigaon",rf:1800,monsoon:1368,lpa:1720,trend:"↗ +0.6%"},
+    {name:"Nagaon",rf:1750,monsoon:1330,lpa:1680,trend:"↗ +0.5%"},
+    {name:"Golaghat",rf:2000,monsoon:1520,lpa:1920,trend:"↗ +1.0%"},
+    {name:"Jorhat",rf:1950,monsoon:1482,lpa:1870,trend:"↗ +0.7%"},
+    {name:"Sibsagar",rf:1900,monsoon:1444,lpa:1820,trend:"↗ +0.6%"},
+    {name:"Dibrugarh",rf:2100,monsoon:1596,lpa:2000,trend:"↗ +0.9%"},
+    {name:"Tinsukia",rf:2300,monsoon:1748,lpa:2200,trend:"↗ +1.1%"},
+    {name:"Lakhimpur",rf:2200,monsoon:1672,lpa:2100,trend:"↗ +0.8%"},
+    {name:"Sonitpur",rf:1850,monsoon:1406,lpa:1780,trend:"↗ +0.7%"},
+    {name:"Cachar",rf:2100,monsoon:1596,lpa:2000,trend:"↗ +0.9%"},
+    {name:"Hailakandi",rf:2300,monsoon:1748,lpa:2200,trend:"↗ +0.8%"},
+    {name:"Karimganj",rf:2400,monsoon:1824,lpa:2300,trend:"↗ +0.7%"},
+    {name:"Karbi Anglong",rf:1700,monsoon:1292,lpa:1620,trend:"↗ +0.6%"},
+    {name:"Dima Hasao",rf:2500,monsoon:1900,lpa:2400,trend:"↗ +0.5%"},
+  ],
+  events:[
+    {year:"2022",title:"Mega Floods — Silchar",desc:"Silchar city inundated for weeks. Record rainfall in Barak valley. Over 6 million affected across state.",sev:"sev-extreme"},
+    {year:"2017",title:"Barak Valley Flash Floods",desc:"600mm in 48 hours in Cachar district. Multiple bridges swept away.",sev:"sev-high"},
+    {year:"2012",title:"Record Monsoon Deluge",desc:"Assam received 165% of LPA. Back-to-back flood waves affected 30+ districts.",sev:"sev-extreme"},
+    {year:"1998",title:"Brahmaputra Valley Floods",desc:"Record flood discharge. Over 2 million displaced. 150+ deaths.",sev:"sev-extreme"},
+  ]
+},
+
+"Bihar": {
+  coords:[25.0961,85.3131],zoom:6,region:"East India",climate:"Humid Subtropical",
+  lpa:1020,annual2024:968,status:"Deficient",
+  monsoonPct:80,premonsoonPct:10,postmonsoonPct:7,
+  monsoonRF:816,premonsoonRF:102,postmonsoonRF:71,
+  districts:[
+    {name:"Patna",rf:1050,monsoon:840,lpa:1020,trend:"↘ -1.8%"},
+    {name:"Gaya",rf:980,monsoon:784,lpa:1000,trend:"↘ -2.3%"},
+    {name:"Bhagalpur",rf:1140,monsoon:912,lpa:1100,trend:"↗ +0.6%"},
+    {name:"Muzaffarpur",rf:1080,monsoon:864,lpa:1050,trend:"↗ +0.4%"},
+    {name:"Darbhanga",rf:1100,monsoon:880,lpa:1070,trend:"↗ +0.5%"},
+    {name:"Samastipur",rf:1060,monsoon:848,lpa:1030,trend:"↗ +0.3%"},
+    {name:"Madhubani",rf:1180,monsoon:944,lpa:1140,trend:"↗ +0.8%"},
+    {name:"Sitamarhi",rf:1200,monsoon:960,lpa:1150,trend:"↗ +1.1%"},
+    {name:"East Champaran",rf:1250,monsoon:1000,lpa:1200,trend:"↗ +1.0%"},
+    {name:"West Champaran",rf:1280,monsoon:1024,lpa:1220,trend:"↗ +0.9%"},
+    {name:"Saharsa",rf:1050,monsoon:840,lpa:1020,trend:"↗ +0.4%"},
+    {name:"Supaul",rf:1100,monsoon:880,lpa:1070,trend:"↗ +0.6%"},
+    {name:"Purnea",rf:1140,monsoon:912,lpa:1100,trend:"↗ +0.7%"},
+    {name:"Kishanganj",rf:1400,monsoon:1120,lpa:1350,trend:"↗ +1.2%"},
+    {name:"Rohtas",rf:900,monsoon:720,lpa:920,trend:"↘ -2.8%"},
+    {name:"Kaimur",rf:880,monsoon:704,lpa:910,trend:"↘ -3.1%"},
+    {name:"Vaishali",rf:1040,monsoon:832,lpa:1010,trend:"↗ +0.3%"},
+    {name:"Nalanda",rf:1000,monsoon:800,lpa:980,trend:"↗ +0.2%"},
+    {name:"Nawada",rf:1020,monsoon:816,lpa:1000,trend:"↗ +0.3%"},
+    {name:"Jehanabad",rf:990,monsoon:792,lpa:970,trend:"↗ +0.2%"},
+    {name:"Arwal",rf:980,monsoon:784,lpa:960,trend:"↗ +0.2%"},
+    {name:"Aurangabad",rf:880,monsoon:704,lpa:900,trend:"↘ -2.1%"},
+    {name:"Bhojpur",rf:970,monsoon:776,lpa:950,trend:"↗ +0.3%"},
+    {name:"Buxar",rf:960,monsoon:768,lpa:940,trend:"↗ +0.3%"},
+    {name:"Saran",rf:1000,monsoon:800,lpa:980,trend:"↗ +0.4%"},
+    {name:"Siwan",rf:1020,monsoon:816,lpa:990,trend:"↗ +0.5%"},
+    {name:"Gopalganj",rf:1040,monsoon:832,lpa:1000,trend:"↗ +0.6%"},
+    {name:"Begusarai",rf:1060,monsoon:848,lpa:1030,trend:"↗ +0.4%"},
+    {name:"Khagaria",rf:1080,monsoon:864,lpa:1050,trend:"↗ +0.5%"},
+    {name:"Munger",rf:1020,monsoon:816,lpa:990,trend:"↗ +0.4%"},
+    {name:"Sheikhpura",rf:990,monsoon:792,lpa:960,trend:"↗ +0.3%"},
+    {name:"Lakhisarai",rf:1000,monsoon:800,lpa:970,trend:"↗ +0.3%"},
+    {name:"Jamui",rf:1060,monsoon:848,lpa:1030,trend:"↗ +0.5%"},
+    {name:"Banka",rf:1100,monsoon:880,lpa:1070,trend:"↗ +0.6%"},
+    {name:"Katihar",rf:1200,monsoon:960,lpa:1160,trend:"↗ +0.8%"},
+    {name:"Madhepura",rf:1100,monsoon:880,lpa:1060,trend:"↗ +0.7%"},
+    {name:"Araria",rf:1300,monsoon:1040,lpa:1260,trend:"↗ +0.9%"},
+    {name:"Sheohar",rf:1180,monsoon:944,lpa:1140,trend:"↗ +0.8%"},
+  ],
+  events:[
+    {year:"2017",title:"Bihar Floods — North Bihar",desc:"Kosi, Gandak and Bagmati rivers breached banks. 514 deaths, 1.7 crore affected.",sev:"sev-extreme"},
+    {year:"2007",title:"North Bihar Mega Floods",desc:"One of worst floods in decades. 25 districts inundated. 1,287 deaths.",sev:"sev-extreme"},
+    {year:"2021",title:"Monsoon Surplus",desc:"Bihar received 122% of LPA in 2021. Flash floods in multiple districts.",sev:"sev-high"},
+    {year:"2002",title:"Kosi Floods",desc:"Record discharge in Kosi river. Embankments breached at multiple points.",sev:"sev-high"},
+  ]
+},
+
+"Chhattisgarh": {
+  coords:[21.2787,81.8661],zoom:6,region:"Central India",climate:"Tropical Savanna",
+  lpa:1290,annual2024:1340,status:"Normal",
+  monsoonPct:85,premonsoonPct:6,postmonsoonPct:7,
+  monsoonRF:1097,premonsoonRF:77,postmonsoonRF:90,
+  districts:[
+    {name:"Raipur",rf:1280,monsoon:1088,lpa:1250,trend:"↗ +0.7%"},
+    {name:"Durg",rf:1200,monsoon:1020,lpa:1180,trend:"↗ +0.5%"},
+    {name:"Bilaspur",rf:1320,monsoon:1122,lpa:1280,trend:"↗ +0.8%"},
+    {name:"Korba",rf:1400,monsoon:1190,lpa:1360,trend:"↗ +1.0%"},
+    {name:"Surguja",rf:1350,monsoon:1148,lpa:1300,trend:"↗ +0.9%"},
+    {name:"Bastar",rf:1600,monsoon:1360,lpa:1550,trend:"↗ +1.1%"},
+    {name:"Dantewada",rf:1500,monsoon:1275,lpa:1450,trend:"↗ +0.8%"},
+    {name:"Kanker",rf:1380,monsoon:1173,lpa:1330,trend:"↗ +0.7%"},
+    {name:"Rajnandgaon",rf:1180,monsoon:1003,lpa:1150,trend:"↗ +0.6%"},
+    {name:"Kabirdham",rf:1250,monsoon:1063,lpa:1210,trend:"↗ +0.5%"},
+    {name:"Jashpur",rf:1450,monsoon:1233,lpa:1400,trend:"↗ +0.8%"},
+    {name:"Koriya",rf:1300,monsoon:1105,lpa:1260,trend:"↗ +0.6%"},
+    {name:"Mahasamund",rf:1300,monsoon:1105,lpa:1260,trend:"↗ +0.5%"},
+    {name:"Gariaband",rf:1350,monsoon:1148,lpa:1300,trend:"↗ +0.7%"},
+    {name:"Balod",rf:1180,monsoon:1003,lpa:1150,trend:"↗ +0.5%"},
+    {name:"Balodabazar",rf:1280,monsoon:1088,lpa:1240,trend:"↗ +0.6%"},
+    {name:"Mungeli",rf:1250,monsoon:1063,lpa:1210,trend:"↗ +0.5%"},
+    {name:"Bemetara",rf:1150,monsoon:978,lpa:1120,trend:"↗ +0.4%"},
+    {name:"Sukma",rf:1600,monsoon:1360,lpa:1550,trend:"↗ +0.8%"},
+    {name:"Bijapur",rf:1450,monsoon:1233,lpa:1400,trend:"↗ +0.7%"},
+    {name:"Narayanpur",rf:1500,monsoon:1275,lpa:1450,trend:"↗ +0.6%"},
+    {name:"Kondagaon",rf:1400,monsoon:1190,lpa:1350,trend:"↗ +0.7%"},
+  ],
+  events:[
+    {year:"2022",title:"Chhattisgarh Floods",desc:"Record August 2022 rainfall. Sheonath, Mahanadi rivers in severe spate. 40+ deaths.",sev:"sev-high"},
+    {year:"2010",title:"Bastar Extreme Rainfall",desc:"800mm in 4 days in Bastar division. Widespread flooding in tribal areas.",sev:"sev-high"},
+    {year:"2003",title:"Raipur Flash Floods",desc:"Unprecedented 320mm in 24 hours in Raipur. Urban flooding across capital city.",sev:"sev-moderate"},
+  ]
+},
+
+"Goa": {
+  coords:[15.2993,74.1240],zoom:8,region:"West India",climate:"Tropical Monsoon",
+  lpa:2940,annual2024:3120,status:"Excess",
+  monsoonPct:92,premonsoonPct:3,postmonsoonPct:4,
+  monsoonRF:2870,premonsoonRF:88,postmonsoonRF:118,
+  districts:[
+    {name:"North Goa",rf:3000,monsoon:2760,lpa:2900,trend:"↗ +1.4%"},
+    {name:"South Goa",rf:3300,monsoon:3036,lpa:3200,trend:"↗ +1.2%"},
+  ],
+  events:[
+    {year:"2019",title:"Extreme Monsoon Surge",desc:"Goa received 152% of LPA in July 2019. Widespread flooding across both districts.",sev:"sev-extreme"},
+    {year:"2021",title:"Landslides — South Goa",desc:"Record 3-day rainfall triggered multiple landslides in South Goa hills.",sev:"sev-high"},
+    {year:"2014",title:"July Deluge",desc:"800mm in 72 hours. Panaji flooded, Mandovi river above danger mark.",sev:"sev-high"},
+  ]
+},
+
+"Gujarat": {
+  coords:[22.2587,71.1924],zoom:6,region:"West India",climate:"Semi-Arid to Arid",
+  lpa:820,annual2024:790,status:"Normal",
+  monsoonPct:89,premonsoonPct:3,postmonsoonPct:5,
+  monsoonRF:703,premonsoonRF:24,postmonsoonRF:40,
+  districts:[
+    {name:"Ahmedabad",rf:680,monsoon:605,lpa:700,trend:"↘ -1.6%"},
+    {name:"Surat",rf:1100,monsoon:979,lpa:1050,trend:"↗ +0.9%"},
+    {name:"Vadodara",rf:890,monsoon:792,lpa:870,trend:"↗ +0.4%"},
+    {name:"Rajkot",rf:620,monsoon:552,lpa:650,trend:"↘ -2.1%"},
+    {name:"Kutch",rf:340,monsoon:303,lpa:360,trend:"↘ -3.2%"},
+    {name:"Junagadh",rf:850,monsoon:757,lpa:820,trend:"↗ +0.6%"},
+    {name:"Valsad",rf:1800,monsoon:1602,lpa:1750,trend:"↗ +1.1%"},
+    {name:"Navsari",rf:1650,monsoon:1469,lpa:1600,trend:"↗ +0.8%"},
+    {name:"Tapi",rf:1400,monsoon:1246,lpa:1360,trend:"↗ +0.7%"},
+    {name:"Narmada",rf:1050,monsoon:935,lpa:1020,trend:"↗ +0.5%"},
+    {name:"Bharuch",rf:880,monsoon:783,lpa:850,trend:"↗ +0.4%"},
+    {name:"Anand",rf:780,monsoon:694,lpa:760,trend:"↗ +0.3%"},
+    {name:"Kheda",rf:760,monsoon:676,lpa:740,trend:"↗ +0.2%"},
+    {name:"Panchmahal",rf:900,monsoon:801,lpa:880,trend:"↗ +0.4%"},
+    {name:"Dahod",rf:950,monsoon:846,lpa:920,trend:"↗ +0.5%"},
+    {name:"Sabarkantha",rf:880,monsoon:783,lpa:860,trend:"↗ +0.3%"},
+    {name:"Gandhinagar",rf:700,monsoon:623,lpa:680,trend:"↗ +0.2%"},
+    {name:"Mehsana",rf:650,monsoon:579,lpa:640,trend:"↗ +0.1%"},
+    {name:"Patan",rf:560,monsoon:498,lpa:570,trend:"↘ -0.8%"},
+    {name:"Banaskantha",rf:620,monsoon:552,lpa:640,trend:"↘ -1.4%"},
+    {name:"Surendranagar",rf:520,monsoon:463,lpa:550,trend:"↘ -2.4%"},
+    {name:"Morbi",rf:540,monsoon:481,lpa:560,trend:"↘ -2.0%"},
+    {name:"Jamnagar",rf:480,monsoon:427,lpa:510,trend:"↘ -2.8%"},
+    {name:"Devbhoomi Dwarka",rf:440,monsoon:392,lpa:470,trend:"↘ -3.4%"},
+    {name:"Porbandar",rf:460,monsoon:410,lpa:490,trend:"↘ -3.1%"},
+    {name:"Amreli",rf:580,monsoon:516,lpa:610,trend:"↘ -2.2%"},
+    {name:"Gir Somnath",rf:650,monsoon:579,lpa:680,trend:"↘ -1.9%"},
+    {name:"Botad",rf:560,monsoon:498,lpa:590,trend:"↘ -2.6%"},
+    {name:"Chhota Udaipur",rf:980,monsoon:872,lpa:950,trend:"↗ +0.5%"},
+    {name:"Mahisagar",rf:900,monsoon:801,lpa:880,trend:"↗ +0.3%"},
+    {name:"Aravalli",rf:850,monsoon:757,lpa:830,trend:"↗ +0.2%"},
+    // {name:"Kheda",rf:790,monsoon:703,lpa:770,trend:"↗ +0.2%"},
+    {name:"Dang",rf:2000,monsoon:1780,lpa:1950,trend:"↗ +0.7%"},
+  ],
+  events:[
+    {year:"2023",title:"Cyclone Biparjoy",desc:"Rare June cyclone made landfall. Saurashtra-Kutch extreme rainfall. 1-lakh evacuated.",sev:"sev-extreme"},
+    {year:"2017",title:"Gujarat Floods",desc:"Banaskantha received 700mm in 24 hours. 218 deaths, massive crop loss across north Gujarat.",sev:"sev-extreme"},
+    {year:"2020",title:"Kutch Flash Floods",desc:"500mm in 3 days in arid Kutch. Villages cut off for weeks.",sev:"sev-high"},
+    {year:"2002",title:"Gujarat Drought",desc:"Severe multi-year drought. Dam levels critically low. Water emergency in major cities.",sev:"sev-high"},
+  ]
+},
+
+"Haryana": {
+  coords:[29.0588,76.0856],zoom:7,region:"North India",climate:"Semi-Arid",
+  lpa:614,annual2024:580,status:"Deficient",
+  monsoonPct:68,premonsoonPct:19,postmonsoonPct:8,
+  monsoonRF:418,premonsoonRF:117,postmonsoonRF:49,
+  districts:[
+    {name:"Gurugram",rf:600,monsoon:408,lpa:620,trend:"↘ -2.4%"},
+    {name:"Faridabad",rf:620,monsoon:422,lpa:640,trend:"↘ -2.1%"},
+    {name:"Hisar",rf:440,monsoon:299,lpa:460,trend:"↘ -3.8%"},
+    {name:"Ambala",rf:820,monsoon:558,lpa:840,trend:"↘ -1.6%"},
+    {name:"Kurukshetra",rf:740,monsoon:503,lpa:760,trend:"↘ -1.8%"},
+    {name:"Rohtak",rf:560,monsoon:381,lpa:580,trend:"↘ -2.9%"},
+    {name:"Sonipat",rf:580,monsoon:394,lpa:600,trend:"↘ -2.6%"},
+    {name:"Panipat",rf:600,monsoon:408,lpa:620,trend:"↘ -2.3%"},
+    {name:"Karnal",rf:720,monsoon:490,lpa:740,trend:"↘ -1.9%"},
+    {name:"Yamunanagar",rf:880,monsoon:598,lpa:900,trend:"↘ -1.4%"},
+    {name:"Sirsa",rf:380,monsoon:258,lpa:410,trend:"↘ -4.5%"},
+    {name:"Fatehabad",rf:400,monsoon:272,lpa:430,trend:"↘ -4.2%"},
+    {name:"Bhiwani",rf:440,monsoon:299,lpa:470,trend:"↘ -3.6%"},
+    {name:"Mahendragarh",rf:520,monsoon:354,lpa:550,trend:"↘ -3.2%"},
+    {name:"Rewari",rf:540,monsoon:367,lpa:570,trend:"↘ -3.0%"},
+    {name:"Jhajjar",rf:560,monsoon:381,lpa:590,trend:"↘ -2.7%"},
+    {name:"Nuh (Mewat)",rf:600,monsoon:408,lpa:630,trend:"↘ -2.4%"},
+    {name:"Palwal",rf:620,monsoon:422,lpa:650,trend:"↘ -2.2%"},
+    {name:"Jind",rf:560,monsoon:381,lpa:590,trend:"↘ -2.8%"},
+    {name:"Kaithal",rf:660,monsoon:449,lpa:680,trend:"↘ -2.0%"},
+    {name:"Panchkula",rf:860,monsoon:585,lpa:880,trend:"↘ -1.5%"},
+    // {name:"Fatehabad",rf:400,monsoon:272,lpa:430,trend:"↘ -4.0%"},
+  ],
+  events:[
+    {year:"2023",title:"August Deluge — Gurugram",desc:"Extreme rainfall caused major urban flooding. Highest single-day rainfall in decades.",sev:"sev-high"},
+    {year:"2010",title:"Flash Floods — Ambala",desc:"1000-year flood event. Ghaggar river overflow caused widespread destruction.",sev:"sev-extreme"},
+    {year:"2002",title:"Haryana Drought",desc:"Severe deficit monsoon. Agricultural crisis across semi-arid districts.",sev:"sev-high"},
+  ]
+},
+
+"Himachal Pradesh": {
+  coords:[31.1048,77.1734],zoom:7,region:"North India",climate:"Alpine to Sub-tropical",
+  lpa:1150,annual2024:1240,status:"Excess",
+  monsoonPct:60,premonsoonPct:22,postmonsoonPct:12,
+  monsoonRF:690,premonsoonRF:253,postmonsoonRF:138,
+  districts:[
+    {name:"Shimla",rf:1480,monsoon:888,lpa:1400,trend:"↗ +1.8%"},
+    {name:"Kangra",rf:1850,monsoon:1110,lpa:1750,trend:"↗ +2.2%"},
+    {name:"Mandi",rf:1600,monsoon:960,lpa:1500,trend:"↗ +1.9%"},
+    {name:"Kullu",rf:1400,monsoon:840,lpa:1320,trend:"↗ +1.6%"},
+    {name:"Solan",rf:1200,monsoon:720,lpa:1140,trend:"↗ +1.4%"},
+    {name:"Sirmaur",rf:1550,monsoon:930,lpa:1460,trend:"↗ +1.7%"},
+    {name:"Una",rf:1050,monsoon:630,lpa:990,trend:"↗ +1.1%"},
+    {name:"Hamirpur",rf:1100,monsoon:660,lpa:1040,trend:"↗ +1.2%"},
+    {name:"Bilaspur",rf:980,monsoon:588,lpa:920,trend:"↗ +1.0%"},
+    {name:"Lahaul & Spiti",rf:450,monsoon:270,lpa:420,trend:"↗ +0.8%"},
+    {name:"Kinnaur",rf:780,monsoon:468,lpa:720,trend:"↗ +1.1%"},
+    {name:"Chamba",rf:1650,monsoon:990,lpa:1550,trend:"↗ +2.0%"},
+  ],
+  events:[
+    {year:"2023",title:"Himachal Cloudbursts",desc:"Unprecedented cloudburst season. 400+ deaths. Shimla, Mandi, Kullu worst hit. Record single-season damage.",sev:"sev-extreme"},
+    {year:"2021",title:"Flash Floods — Dharamshala",desc:"600mm in 48 hours in Kangra. Massive landslides. Multiple deaths.",sev:"sev-extreme"},
+    {year:"2000",title:"Kinnaur Cloudbursts",desc:"Series of cloudbursts in high-altitude areas. Villages buried under debris.",sev:"sev-high"},
+  ]
+},
+
+"Jharkhand": {
+  coords:[23.6102,85.2799],zoom:6,region:"East India",climate:"Humid Subtropical",
+  lpa:1330,annual2024:1380,status:"Normal",
+  monsoonPct:83,premonsoonPct:8,postmonsoonPct:6,
+  monsoonRF:1104,premonsoonRF:106,postmonsoonRF:80,
+  districts:[
+    {name:"Ranchi",rf:1400,monsoon:1162,lpa:1360,trend:"↗ +0.7%"},
+    {name:"Dhanbad",rf:1320,monsoon:1096,lpa:1280,trend:"↗ +0.5%"},
+    {name:"Jamshedpur (E.Singhbhum)",rf:1480,monsoon:1228,lpa:1440,trend:"↗ +0.8%"},
+    {name:"Bokaro",rf:1280,monsoon:1062,lpa:1240,trend:"↗ +0.5%"},
+    {name:"Giridih",rf:1240,monsoon:1029,lpa:1200,trend:"↗ +0.4%"},
+    {name:"Hazaribagh",rf:1300,monsoon:1079,lpa:1260,trend:"↗ +0.5%"},
+    {name:"Deoghar",rf:1200,monsoon:996,lpa:1160,trend:"↗ +0.4%"},
+    {name:"Dumka",rf:1350,monsoon:1121,lpa:1310,trend:"↗ +0.6%"},
+    {name:"Godda",rf:1280,monsoon:1062,lpa:1240,trend:"↗ +0.5%"},
+    {name:"Pakur",rf:1380,monsoon:1145,lpa:1340,trend:"↗ +0.6%"},
+    {name:"Sahibganj",rf:1400,monsoon:1162,lpa:1360,trend:"↗ +0.7%"},
+    {name:"Palamu",rf:1100,monsoon:913,lpa:1060,trend:"↗ +0.4%"},
+    {name:"Garhwa",rf:1080,monsoon:896,lpa:1040,trend:"↗ +0.3%"},
+    {name:"Chatra",rf:1200,monsoon:996,lpa:1160,trend:"↗ +0.5%"},
+    {name:"Latehar",rf:1300,monsoon:1079,lpa:1260,trend:"↗ +0.6%"},
+    {name:"Lohardaga",rf:1350,monsoon:1121,lpa:1310,trend:"↗ +0.7%"},
+    {name:"Gumla",rf:1400,monsoon:1162,lpa:1360,trend:"↗ +0.8%"},
+    {name:"Simdega",rf:1480,monsoon:1228,lpa:1440,trend:"↗ +0.9%"},
+    {name:"West Singhbhum",rf:1550,monsoon:1287,lpa:1500,trend:"↗ +1.0%"},
+    {name:"Seraikela-Kharsawan",rf:1480,monsoon:1228,lpa:1440,trend:"↗ +0.8%"},
+    {name:"Ramgarh",rf:1280,monsoon:1062,lpa:1240,trend:"↗ +0.5%"},
+    {name:"Koderma",rf:1180,monsoon:979,lpa:1140,trend:"↗ +0.4%"},
+    {name:"Jamtara",rf:1280,monsoon:1062,lpa:1240,trend:"↗ +0.5%"},
+    {name:"Khunti",rf:1350,monsoon:1121,lpa:1310,trend:"↗ +0.6%"},
+  ],
+  events:[
+    {year:"2017",title:"Jharkhand Floods",desc:"August 2017 extreme rainfall. Subarnarekha and Damodar rivers flooded. 150+ deaths.",sev:"sev-extreme"},
+    {year:"2020",title:"Flash Floods — Ranchi",desc:"400mm in 3 days. Multiple districts flooded. Crop damage across Kharif season.",sev:"sev-high"},
+    {year:"2009",title:"Drought Year",desc:"Jharkhand received only 68% of LPA. Severe agricultural distress.",sev:"sev-high"},
+  ]
+},
+
+"Karnataka": {
+  coords:[15.3173,75.7139],zoom:6,region:"South India",climate:"Tropical to Semi-Arid",
+  lpa:1148,annual2024:1220,status:"Excess",
+  monsoonPct:69,premonsoonPct:13,postmonsoonPct:15,
+  monsoonRF:792,premonsoonRF:149,postmonsoonRF:172,
+  districts:[
+    {name:"Bengaluru Urban",rf:870,monsoon:600,lpa:840,trend:"↗ +0.9%"},
+    {name:"Mysuru",rf:780,monsoon:538,lpa:750,trend:"↗ +0.7%"},
+    {name:"Mangaluru (Dakshina Kannada)",rf:3850,monsoon:2657,lpa:3700,trend:"↗ +1.2%"},
+    {name:"Udupi",rf:3600,monsoon:2484,lpa:3450,trend:"↗ +1.1%"},
+    {name:"Shivamogga",rf:1800,monsoon:1242,lpa:1720,trend:"↗ +1.4%"},
+    {name:"Chikkamagaluru",rf:1650,monsoon:1139,lpa:1580,trend:"↗ +1.2%"},
+    {name:"Hassan",rf:1100,monsoon:759,lpa:1060,trend:"↗ +0.8%"},
+    {name:"Kodagu",rf:2700,monsoon:1863,lpa:2580,trend:"↗ +1.6%"},
+    {name:"Belagavi",rf:900,monsoon:621,lpa:870,trend:"↗ +0.5%"},
+    {name:"Dharwad",rf:800,monsoon:552,lpa:780,trend:"↗ +0.3%"},
+    {name:"Gadag",rf:580,monsoon:400,lpa:570,trend:"↗ +0.2%"},
+    {name:"Vijayapura (Bijapur)",rf:520,monsoon:359,lpa:540,trend:"↘ -2.1%"},
+    {name:"Bidar",rf:720,monsoon:497,lpa:730,trend:"↘ -0.9%"},
+    {name:"Kalaburagi (Gulbarga)",rf:620,monsoon:428,lpa:640,trend:"↘ -1.8%"},
+    {name:"Raichur",rf:650,monsoon:449,lpa:680,trend:"↘ -2.4%"},
+    {name:"Koppal",rf:580,monsoon:400,lpa:610,trend:"↘ -2.8%"},
+    {name:"Ballari",rf:560,monsoon:387,lpa:590,trend:"↘ -3.1%"},
+    {name:"Chitradurga",rf:620,monsoon:428,lpa:640,trend:"↘ -1.9%"},
+    {name:"Tumkur",rf:820,monsoon:566,lpa:790,trend:"↗ +0.5%"},
+    {name:"Kolar",rf:840,monsoon:580,lpa:810,trend:"↗ +0.6%"},
+    {name:"Chamarajanagara",rf:750,monsoon:518,lpa:720,trend:"↗ +0.5%"},
+    {name:"Mandya",rf:780,monsoon:538,lpa:750,trend:"↗ +0.5%"},
+    {name:"Ramanagara",rf:820,monsoon:566,lpa:790,trend:"↗ +0.6%"},
+    {name:"Chikballapur",rf:820,monsoon:566,lpa:790,trend:"↗ +0.5%"},
+    {name:"Yadgir",rf:640,monsoon:442,lpa:660,trend:"↘ -2.0%"},
+    {name:"Bagalkot",rf:600,monsoon:414,lpa:620,trend:"↘ -2.2%"},
+    {name:"Haveri",rf:700,monsoon:483,lpa:720,trend:"↘ -1.5%"},
+    {name:"Uttara Kannada",rf:2800,monsoon:1932,lpa:2680,trend:"↗ +1.3%"},
+    {name:"Davangere",rf:640,monsoon:442,lpa:620,trend:"↗ +0.4%"},
+    {name:"Vijayanagara",rf:560,monsoon:387,lpa:580,trend:"↘ -2.5%"},
+  ],
+  events:[
+    {year:"2019",title:"Karnataka Mega-Floods",desc:"Worst floods in 50 years. Kodagu, Belagavi severely hit. 50+ deaths, 7 lakh displaced.",sev:"sev-extreme"},
+    {year:"2022",title:"Bengaluru Urban Floods",desc:"Record 200mm+ in single day. Major IT corridors flooded. City paralyzed.",sev:"sev-high"},
+    {year:"2009",title:"North Karnataka Floods",desc:"Krishna, Tungabhadra rivers in spate. 100+ deaths across North Karnataka districts.",sev:"sev-extreme"},
+  ]
+},
+
+"Kerala": {
+  coords:[10.8505,76.2711],zoom:7,region:"South India",climate:"Tropical Monsoon",
+  lpa:3055,annual2024:3280,status:"Excess",
+  monsoonPct:64,premonsoonPct:10,postmonsoonPct:22,
+  monsoonRF:2099,premonsoonRF:328,postmonsoonRF:722,
+  districts:[
+    {name:"Thiruvananthapuram",rf:1800,monsoon:1100,lpa:1700,trend:"↘ -1.2%"},
+    {name:"Kollam",rf:2200,monsoon:1430,lpa:2100,trend:"↗ +0.8%"},
+    {name:"Pathanamthitta",rf:2600,monsoon:1690,lpa:2480,trend:"↗ +1.4%"},
+    {name:"Alappuzha",rf:2450,monsoon:1593,lpa:2350,trend:"↗ +1.0%"},
+    {name:"Kottayam",rf:2700,monsoon:1755,lpa:2580,trend:"↗ +1.6%"},
+    {name:"Idukki",rf:3200,monsoon:2100,lpa:2900,trend:"↗ +1.8%"},
+    {name:"Ernakulam",rf:2600,monsoon:1680,lpa:2500,trend:"↗ +0.7%"},
+    {name:"Thrissur",rf:2800,monsoon:1780,lpa:2700,trend:"↗ +0.9%"},
+    {name:"Palakkad",rf:2100,monsoon:1390,lpa:2000,trend:"↘ -0.8%"},
+    {name:"Malappuram",rf:2950,monsoon:1918,lpa:2820,trend:"↗ +1.1%"},
+    {name:"Kozhikode",rf:3100,monsoon:1990,lpa:2950,trend:"→ +0.4%"},
+    {name:"Wayanad",rf:2900,monsoon:1900,lpa:2600,trend:"↗ +2.2%"},
+    {name:"Kannur",rf:3400,monsoon:2200,lpa:3100,trend:"↗ +1.6%"},
+    {name:"Kasaragod",rf:3350,monsoon:2178,lpa:3100,trend:"↗ +1.3%"},
+  ],
+  events:[
+    {year:"2018",title:"Kerala Floods — Century's Worst",desc:"Highest rainfall since 1924. All 14 districts flooded. 483 deaths, 1.2 million displaced. Idukki dam opened after 26 years.",sev:"sev-extreme"},
+    {year:"2021",title:"Kottayam Landslides",desc:"Rajamala landslide — 80+ deaths. Extreme rainfall in 12 hours triggered multiple slides.",sev:"sev-extreme"},
+    {year:"2019",title:"NE Monsoon Floods",desc:"Record October–November rainfall. Widespread flooding across South Kerala.",sev:"sev-high"},
+    {year:"2023",title:"Excess SW Monsoon 2023",desc:"Kerala received 127% of LPA during June–September. Major flood warnings issued.",sev:"sev-high"},
+  ]
+},
+
+"Madhya Pradesh": {
+  coords:[22.9734,78.6569],zoom:6,region:"Central India",climate:"Tropical & Sub-tropical",
+  lpa:1020,annual2024:985,status:"Deficient",
+  monsoonPct:84,premonsoonPct:7,postmonsoonPct:7,
+  monsoonRF:857,premonsoonRF:71,postmonsoonRF:71,
+  districts:[
+    {name:"Bhopal",rf:1140,monsoon:958,lpa:1100,trend:"↗ +0.7%"},
+    {name:"Indore",rf:980,monsoon:823,lpa:950,trend:"↗ +0.4%"},
+    {name:"Jabalpur",rf:1380,monsoon:1159,lpa:1340,trend:"↗ +0.8%"},
+    {name:"Gwalior",rf:820,monsoon:689,lpa:840,trend:"↘ -1.6%"},
+    {name:"Ujjain",rf:870,monsoon:731,lpa:890,trend:"↘ -1.4%"},
+    {name:"Sagar",rf:1100,monsoon:924,lpa:1060,trend:"↗ +0.6%"},
+    {name:"Rewa",rf:1080,monsoon:907,lpa:1040,trend:"↗ +0.5%"},
+    {name:"Satna",rf:1020,monsoon:857,lpa:980,trend:"↗ +0.4%"},
+    {name:"Katni",rf:1200,monsoon:1008,lpa:1160,trend:"↗ +0.7%"},
+    {name:"Chhindwara",rf:1350,monsoon:1134,lpa:1300,trend:"↗ +0.9%"},
+    {name:"Balaghat",rf:1600,monsoon:1344,lpa:1550,trend:"↗ +1.1%"},
+    {name:"Mandla",rf:1500,monsoon:1260,lpa:1450,trend:"↗ +1.0%"},
+    {name:"Dindori",rf:1400,monsoon:1176,lpa:1350,trend:"↗ +0.8%"},
+    {name:"Seoni",rf:1350,monsoon:1134,lpa:1300,trend:"↗ +0.7%"},
+    {name:"Narsinghpur",rf:1250,monsoon:1050,lpa:1200,trend:"↗ +0.6%"},
+    {name:"Hoshangabad",rf:1150,monsoon:966,lpa:1100,trend:"↗ +0.5%"},
+    {name:"Dewas",rf:900,monsoon:756,lpa:880,trend:"↗ +0.3%"},
+    {name:"Shajapur",rf:820,monsoon:689,lpa:800,trend:"↗ +0.2%"},
+    {name:"Rajgarh",rf:780,monsoon:655,lpa:800,trend:"↘ -1.3%"},
+    {name:"Vidisha",rf:900,monsoon:756,lpa:920,trend:"↘ -1.5%"},
+    {name:"Raisen",rf:1050,monsoon:882,lpa:1010,trend:"↗ +0.5%"},
+    {name:"Bhind",rf:680,monsoon:571,lpa:700,trend:"↘ -2.1%"},
+    {name:"Morena",rf:700,monsoon:588,lpa:720,trend:"↘ -1.9%"},
+    {name:"Sheopur",rf:740,monsoon:622,lpa:760,trend:"↘ -1.5%"},
+    {name:"Datia",rf:780,monsoon:655,lpa:800,trend:"↘ -1.4%"},
+    {name:"Shivpuri",rf:820,monsoon:689,lpa:840,trend:"↘ -1.6%"},
+    {name:"Ashoknagar",rf:840,monsoon:706,lpa:860,trend:"↘ -1.5%"},
+    {name:"Tikamgarh",rf:1020,monsoon:857,lpa:980,trend:"↗ +0.5%"},
+    {name:"Chhatarpur",rf:1000,monsoon:840,lpa:960,trend:"↗ +0.4%"},
+    {name:"Panna",rf:1050,monsoon:882,lpa:1010,trend:"↗ +0.5%"},
+    {name:"Damoh",rf:1100,monsoon:924,lpa:1060,trend:"↗ +0.6%"},
+    {name:"Umaria",rf:1380,monsoon:1159,lpa:1340,trend:"↗ +0.8%"},
+    {name:"Shahdol",rf:1300,monsoon:1092,lpa:1260,trend:"↗ +0.7%"},
+    {name:"Anuppur",rf:1400,monsoon:1176,lpa:1360,trend:"↗ +0.8%"},
+    {name:"Singrauli",rf:1050,monsoon:882,lpa:1010,trend:"↗ +0.5%"},
+    {name:"Sidhi",rf:1020,monsoon:857,lpa:980,trend:"↗ +0.4%"},
+    {name:"Burhanpur",rf:900,monsoon:756,lpa:870,trend:"↗ +0.4%"},
+    {name:"Khandwa",rf:880,monsoon:739,lpa:860,trend:"↗ +0.3%"},
+    {name:"Khargone",rf:820,monsoon:689,lpa:800,trend:"↗ +0.3%"},
+    {name:"Badwani",rf:780,monsoon:655,lpa:760,trend:"↗ +0.3%"},
+    {name:"Dhar",rf:820,monsoon:689,lpa:800,trend:"↗ +0.3%"},
+    {name:"Alirajpur",rf:900,monsoon:756,lpa:880,trend:"↗ +0.4%"},
+    {name:"Jhabua",rf:840,monsoon:706,lpa:820,trend:"↗ +0.3%"},
+    {name:"Ratlam",rf:780,monsoon:655,lpa:760,trend:"↗ +0.2%"},
+    {name:"Mandsaur",rf:720,monsoon:605,lpa:700,trend:"↗ +0.2%"},
+    {name:"Neemuch",rf:700,monsoon:588,lpa:680,trend:"↗ +0.2%"},
+    {name:"Agar Malwa",rf:740,monsoon:622,lpa:720,trend:"↗ +0.3%"},
+    {name:"Niwari",rf:980,monsoon:823,lpa:950,trend:"↗ +0.4%"},
+  ],
+  events:[
+    {year:"2019",title:"MP Mega Floods",desc:"Record August 2019 rainfall. Chambal, Narmada, Betwa in severe spate. Kota barrage opened. 40+ deaths.",sev:"sev-extreme"},
+    {year:"2021",title:"Jabalpur Floods",desc:"Narmada river at 20-year high. Jabalpur, Mandla badly affected.",sev:"sev-high"},
+    {year:"2000",title:"Vindhya Plateau Drought",desc:"Bundelkhand and Vindhya plateau received 52% of LPA. Multi-year drought cycle.",sev:"sev-high"},
+  ]
+},
+
+"Maharashtra": {
+  coords:[19.7515,75.7139],zoom:6,region:"West India",climate:"Tropical & Semi-Arid",
+  lpa:1141,annual2024:1089,status:"Deficient",
+  monsoonPct:87,premonsoonPct:5,postmonsoonPct:8,
+  monsoonRF:947,premonsoonRF:57,postmonsoonRF:92,
+  districts:[
+    {name:"Mumbai",rf:2380,monsoon:2100,lpa:2200,trend:"↘ -3.2%"},
+    {name:"Thane",rf:2200,monsoon:1936,lpa:2080,trend:"↘ -1.4%"},
+    {name:"Raigad",rf:2800,monsoon:2464,lpa:2650,trend:"↗ +1.1%"},
+    {name:"Ratnagiri",rf:3300,monsoon:2904,lpa:3100,trend:"→ +0.2%"},
+    {name:"Sindhudurg",rf:3100,monsoon:2728,lpa:2950,trend:"↗ +0.8%"},
+    {name:"Pune",rf:720,monsoon:634,lpa:690,trend:"↗ +2.1%"},
+    {name:"Nashik",rf:840,monsoon:739,lpa:800,trend:"↗ +1.4%"},
+    {name:"Ahmednagar",rf:520,monsoon:457,lpa:550,trend:"↘ -3.6%"},
+    {name:"Satara",rf:780,monsoon:687,lpa:740,trend:"↗ +0.8%"},
+    {name:"Sangli",rf:560,monsoon:493,lpa:600,trend:"↘ -4.2%"},
+    {name:"Kolhapur",rf:1640,monsoon:1443,lpa:1560,trend:"↗ +1.1%"},
+    {name:"Solapur",rf:580,monsoon:511,lpa:600,trend:"↘ -1.9%"},
+    {name:"Aurangabad",rf:650,monsoon:572,lpa:680,trend:"↘ -2.8%"},
+    {name:"Jalna",rf:620,monsoon:546,lpa:650,trend:"↘ -2.4%"},
+    {name:"Beed",rf:580,monsoon:510,lpa:620,trend:"↘ -4.1%"},
+    {name:"Latur",rf:660,monsoon:581,lpa:700,trend:"↘ -3.6%"},
+    {name:"Osmanabad",rf:640,monsoon:563,lpa:680,trend:"↘ -3.8%"},
+    {name:"Nanded",rf:740,monsoon:651,lpa:770,trend:"↘ -2.8%"},
+    {name:"Parbhani",rf:680,monsoon:598,lpa:720,trend:"↘ -3.2%"},
+    {name:"Hingoli",rf:720,monsoon:634,lpa:760,trend:"↘ -3.0%"},
+    {name:"Akola",rf:740,monsoon:651,lpa:780,trend:"↘ -3.4%"},
+    {name:"Amravati",rf:820,monsoon:722,lpa:860,trend:"↘ -3.8%"},
+    {name:"Washim",rf:700,monsoon:616,lpa:740,trend:"↘ -3.6%"},
+    {name:"Buldhana",rf:680,monsoon:598,lpa:720,trend:"↘ -3.2%"},
+    {name:"Yavatmal",rf:860,monsoon:757,lpa:900,trend:"↘ -4.1%"},
+    {name:"Wardha",rf:1040,monsoon:915,lpa:1080,trend:"↘ -3.2%"},
+    {name:"Nagpur",rf:1190,monsoon:1047,lpa:1100,trend:"↗ +0.8%"},
+    {name:"Bhandara",rf:1280,monsoon:1126,lpa:1220,trend:"↗ +1.1%"},
+    {name:"Gondia",rf:1350,monsoon:1188,lpa:1300,trend:"↗ +1.2%"},
+    {name:"Chandrapur",rf:1280,monsoon:1126,lpa:1220,trend:"↗ +0.9%"},
+    {name:"Gadchiroli",rf:1400,monsoon:1232,lpa:1340,trend:"↗ +1.3%"},
+    {name:"Dhule",rf:540,monsoon:475,lpa:580,trend:"↘ -4.8%"},
+    {name:"Nandurbar",rf:780,monsoon:687,lpa:820,trend:"↘ -3.2%"},
+    {name:"Jalgaon",rf:600,monsoon:528,lpa:640,trend:"↘ -4.2%"},
+  ],
+  events:[
+    {year:"2005",title:"Mumbai Mega-Flood",desc:"26 July 2005 — 944mm rainfall in 24 hours. Unprecedented urban flooding. Over 1,000 lives lost.",sev:"sev-extreme"},
+    {year:"2019",title:"Sangli-Kolhapur Floods",desc:"Severe flooding along Krishna river basin. 50+ lakh displaced. Record monsoon surplus.",sev:"sev-extreme"},
+    {year:"2021",title:"Raigad Landslides",desc:"Torrential rains triggered landslides. Over 200mm in 6 hours in Mahad area.",sev:"sev-high"},
+    {year:"2015",title:"Prolonged Drought — Marathwada",desc:"Vidarbha & Marathwada received 45% below LPA. Severe agricultural distress.",sev:"sev-high"},
+  ]
+},
+
+"Manipur": {
+  coords:[24.6637,93.9063],zoom:7,region:"North-East India",climate:"Sub-tropical Humid",
+  lpa:1540,annual2024:1610,status:"Normal",
+  monsoonPct:74,premonsoonPct:13,postmonsoonPct:10,
+  monsoonRF:1140,premonsoonRF:200,postmonsoonRF:154,
+  districts:[
+    {name:"Imphal West",rf:1480,monsoon:1095,lpa:1440,trend:"↗ +0.7%"},
+    {name:"Imphal East",rf:1500,monsoon:1110,lpa:1460,trend:"↗ +0.8%"},
+    {name:"Bishnupur",rf:1420,monsoon:1051,lpa:1380,trend:"↗ +0.6%"},
+    {name:"Thoubal",rf:1440,monsoon:1066,lpa:1400,trend:"↗ +0.6%"},
+    {name:"Senapati",rf:1800,monsoon:1332,lpa:1740,trend:"↗ +1.0%"},
+    {name:"Ukhrul",rf:1700,monsoon:1258,lpa:1640,trend:"↗ +0.9%"},
+    {name:"Chandel",rf:1600,monsoon:1184,lpa:1540,trend:"↗ +0.8%"},
+    {name:"Churachandpur",rf:1750,monsoon:1295,lpa:1680,trend:"↗ +1.0%"},
+    {name:"Tamenglong",rf:1900,monsoon:1406,lpa:1820,trend:"↗ +1.2%"},
+  ],
+  events:[
+    {year:"2022",title:"Manipur Floods",desc:"Record June rainfall. Imphal river flooded. Capital city inundated.",sev:"sev-high"},
+    {year:"2015",title:"Senapati Landslides",desc:"Extreme rainfall triggered landslides in hilly districts. Multiple deaths.",sev:"sev-high"},
+  ]
+},
+
+"Meghalaya": {
+  coords:[25.4670,91.3662],zoom:7,region:"North-East India",climate:"Sub-tropical Highland",
+  lpa:3000,annual2024:3200,status:"Excess",
+  monsoonPct:68,premonsoonPct:16,postmonsoonPct:12,
+  monsoonRF:2040,premonsoonRF:480,postmonsoonRF:360,
+  districts:[
+    {name:"East Khasi Hills (Shillong)",rf:2380,monsoon:1618,lpa:2280,trend:"↗ +0.9%"},
+    {name:"Ri Bhoi",rf:2600,monsoon:1768,lpa:2480,trend:"↗ +1.1%"},
+    {name:"West Khasi Hills",rf:3800,monsoon:2584,lpa:3650,trend:"↗ +1.2%"},
+    {name:"South West Khasi Hills",rf:4000,monsoon:2720,lpa:3850,trend:"↗ +1.0%"},
+    {name:"Jaintia Hills (East)",rf:3600,monsoon:2448,lpa:3450,trend:"↗ +1.2%"},
+    {name:"East Jaintia Hills",rf:3400,monsoon:2312,lpa:3260,trend:"↗ +1.1%"},
+    {name:"East Garo Hills",rf:2200,monsoon:1496,lpa:2100,trend:"↗ +1.4%"},
+    {name:"West Garo Hills",rf:2400,monsoon:1632,lpa:2280,trend:"↗ +1.3%"},
+    {name:"South Garo Hills",rf:2100,monsoon:1428,lpa:2000,trend:"↗ +1.2%"},
+    {name:"North Garo Hills",rf:2300,monsoon:1564,lpa:2200,trend:"↗ +1.3%"},
+    {name:"Eastern West Khasi Hills",rf:3900,monsoon:2652,lpa:3750,trend:"↗ +1.1%"},
+    {name:"Mairang",rf:2500,monsoon:1700,lpa:2380,trend:"↗ +1.0%"},
+  ],
+  events:[
+    {year:"2022",title:"Cherrapunji Record Rainfall",desc:"11,966mm in single monsoon season — near all-time record. Massive flash floods.",sev:"sev-extreme"},
+    {year:"2012",title:"Meghalaya Mega Floods",desc:"Entire Brahmaputra basin flooded. Cherrapunji area received 2x normal.",sev:"sev-extreme"},
+    {year:"2018",title:"Landslides — E. Khasi Hills",desc:"Record 24-hour rainfall triggered multiple landslides. Roads cut off for weeks.",sev:"sev-high"},
+  ]
+},
+
+"Mizoram": {
+  coords:[23.1645,92.9376],zoom:7,region:"North-East India",climate:"Sub-tropical Humid",
+  lpa:2200,annual2024:2350,status:"Excess",
+  monsoonPct:72,premonsoonPct:14,postmonsoonPct:11,
+  monsoonRF:1584,premonsoonRF:308,postmonsoonRF:242,
+  districts:[
+    {name:"Aizawl",rf:2200,monsoon:1584,lpa:2100,trend:"↗ +1.0%"},
+    {name:"Lunglei",rf:2600,monsoon:1872,lpa:2480,trend:"↗ +1.3%"},
+    {name:"Champhai",rf:1800,monsoon:1296,lpa:1720,trend:"↗ +0.8%"},
+    {name:"Kolasib",rf:2400,monsoon:1728,lpa:2280,trend:"↗ +1.1%"},
+    {name:"Saiha",rf:2500,monsoon:1800,lpa:2380,trend:"↗ +1.2%"},
+    {name:"Serchhip",rf:2100,monsoon:1512,lpa:2000,trend:"↗ +0.9%"},
+    {name:"Lawngtlai",rf:2700,monsoon:1944,lpa:2580,trend:"↗ +1.1%"},
+    {name:"Mamit",rf:2400,monsoon:1728,lpa:2280,trend:"↗ +1.0%"},
+    {name:"Hnahthial",rf:2200,monsoon:1584,lpa:2100,trend:"↗ +0.9%"},
+    {name:"Khawzawl",rf:2000,monsoon:1440,lpa:1900,trend:"↗ +0.8%"},
+    {name:"Saitual",rf:2100,monsoon:1512,lpa:2000,trend:"↗ +0.8%"},
+  ],
+  events:[
+    {year:"2021",title:"Mizoram Landslides",desc:"Extreme monsoon rainfall. Multiple landslides across hilly terrain. Roads cut off.",sev:"sev-high"},
+    {year:"2017",title:"Saiha Flash Floods",desc:"Record 48-hour rainfall in southern Mizoram. River overflow caused displacement.",sev:"sev-moderate"},
+  ]
+},
+
+"Nagaland": {
+  coords:[26.1584,94.5624],zoom:7,region:"North-East India",climate:"Sub-tropical Monsoon",
+  lpa:1900,annual2024:1980,status:"Normal",
+  monsoonPct:73,premonsoonPct:14,postmonsoonPct:10,
+  monsoonRF:1387,premonsoonRF:266,postmonsoonRF:190,
+  districts:[
+    {name:"Kohima",rf:1950,monsoon:1424,lpa:1880,trend:"↗ +0.9%"},
+    {name:"Dimapur",rf:1780,monsoon:1300,lpa:1710,trend:"↗ +0.7%"},
+    {name:"Mokokchung",rf:1900,monsoon:1387,lpa:1820,trend:"↗ +0.8%"},
+    {name:"Wokha",rf:1850,monsoon:1351,lpa:1780,trend:"↗ +0.7%"},
+    {name:"Zunheboto",rf:2100,monsoon:1533,lpa:2020,trend:"↗ +0.9%"},
+    {name:"Phek",rf:2200,monsoon:1606,lpa:2120,trend:"↗ +1.0%"},
+    {name:"Tuensang",rf:2100,monsoon:1533,lpa:2020,trend:"↗ +0.8%"},
+    {name:"Mon",rf:1900,monsoon:1387,lpa:1820,trend:"↗ +0.7%"},
+    {name:"Longleng",rf:2000,monsoon:1460,lpa:1920,trend:"↗ +0.9%"},
+    {name:"Kiphire",rf:2200,monsoon:1606,lpa:2120,trend:"↗ +1.0%"},
+    {name:"Peren",rf:1850,monsoon:1351,lpa:1780,trend:"↗ +0.8%"},
+    {name:"Noklak",rf:2100,monsoon:1533,lpa:2020,trend:"↗ +0.9%"},
+  ],
+  events:[
+    {year:"2021",title:"Nagaland Floods & Landslides",desc:"Record monsoon. NH-29 blocked by landslides. Multiple districts cut off.",sev:"sev-high"},
+    {year:"2015",title:"Dimapur Flash Floods",desc:"Extreme rainfall in Dhansiri valley. Dimapur city flooded.",sev:"sev-moderate"},
+  ]
+},
+
+"Odisha": {
+  coords:[20.9517,85.0985],zoom:6,region:"East India",climate:"Tropical Savanna",
+  lpa:1490,annual2024:1560,status:"Normal",
+  monsoonPct:80,premonsoonPct:7,postmonsoonPct:11,
+  monsoonRF:1192,premonsoonRF:104,postmonsoonRF:164,
+  districts:[
+    {name:"Bhubaneswar (Khordha)",rf:1450,monsoon:1160,lpa:1400,trend:"↗ +0.7%"},
+    {name:"Cuttack",rf:1480,monsoon:1184,lpa:1430,trend:"↗ +0.8%"},
+    {name:"Puri",rf:1400,monsoon:1120,lpa:1350,trend:"↗ +0.6%"},
+    {name:"Ganjam",rf:1320,monsoon:1056,lpa:1280,trend:"↗ +0.5%"},
+    {name:"Gajapati",rf:1200,monsoon:960,lpa:1150,trend:"↗ +0.7%"},
+    {name:"Koraput",rf:1480,monsoon:1184,lpa:1430,trend:"↗ +0.8%"},
+    {name:"Malkangiri",rf:1550,monsoon:1240,lpa:1500,trend:"↗ +0.9%"},
+    {name:"Nabarangapur",rf:1480,monsoon:1184,lpa:1430,trend:"↗ +0.8%"},
+    {name:"Rayagada",rf:1350,monsoon:1080,lpa:1300,trend:"↗ +0.7%"},
+    {name:"Kandhamal",rf:1550,monsoon:1240,lpa:1500,trend:"↗ +0.9%"},
+    {name:"Kalahandi",rf:1400,monsoon:1120,lpa:1350,trend:"↗ +0.8%"},
+    {name:"Nuapada",rf:1250,monsoon:1000,lpa:1200,trend:"↗ +0.6%"},
+    {name:"Bolangir",rf:1300,monsoon:1040,lpa:1250,trend:"↗ +0.7%"},
+    {name:"Subarnapur",rf:1300,monsoon:1040,lpa:1250,trend:"↗ +0.7%"},
+    {name:"Bargarh",rf:1380,monsoon:1104,lpa:1330,trend:"↗ +0.7%"},
+    {name:"Sambalpur",rf:1500,monsoon:1200,lpa:1450,trend:"↗ +0.9%"},
+    {name:"Jharsuguda",rf:1480,monsoon:1184,lpa:1430,trend:"↗ +0.8%"},
+    {name:"Sundargarh",rf:1580,monsoon:1264,lpa:1520,trend:"↗ +1.0%"},
+    {name:"Keonjhar",rf:1650,monsoon:1320,lpa:1600,trend:"↗ +1.1%"},
+    {name:"Mayurbhanj",rf:1700,monsoon:1360,lpa:1650,trend:"↗ +1.1%"},
+    {name:"Balasore",rf:1620,monsoon:1296,lpa:1560,trend:"↗ +1.0%"},
+    {name:"Bhadrak",rf:1550,monsoon:1240,lpa:1500,trend:"↗ +0.9%"},
+    {name:"Kendrapara",rf:1480,monsoon:1184,lpa:1430,trend:"↗ +0.8%"},
+    {name:"Jagatsinghpur",rf:1420,monsoon:1136,lpa:1380,trend:"↗ +0.7%"},
+    {name:"Jajpur",rf:1480,monsoon:1184,lpa:1430,trend:"↗ +0.8%"},
+    {name:"Dhenkanal",rf:1520,monsoon:1216,lpa:1470,trend:"↗ +0.9%"},
+    {name:"Angul",rf:1520,monsoon:1216,lpa:1470,trend:"↗ +0.9%"},
+    {name:"Deogarh",rf:1480,monsoon:1184,lpa:1430,trend:"↗ +0.8%"},
+    {name:"Nayagarh",rf:1480,monsoon:1184,lpa:1430,trend:"↗ +0.8%"},
+    {name:"Boudh",rf:1400,monsoon:1120,lpa:1350,trend:"↗ +0.7%"},
+  ],
+  events:[
+    {year:"2013",title:"Cyclone Phailin",desc:"One of India's strongest landfalls. 220kmph winds + extreme rainfall. 12 million evacuated.",sev:"sev-extreme"},
+    {year:"1999",title:"Super Cyclone Odisha",desc:"Most devastating cyclone in decades. 10,000+ deaths. Extreme coastal rainfall.",sev:"sev-extreme"},
+    {year:"2021",title:"Cyclone Yaas",desc:"Major flooding in coastal districts. Record storm surge in Balasore-Bhadrak coast.",sev:"sev-extreme"},
+    {year:"2020",title:"Cyclone Amphan",desc:"Extreme rainfall in coastal Odisha. Northern districts severely impacted.",sev:"sev-high"},
+  ]
+},
+
+"Punjab": {
+  coords:[31.1471,75.3412],zoom:7,region:"North India",climate:"Semi-Arid Continental",
+  lpa:648,annual2024:612,status:"Deficient",
+  monsoonPct:70,premonsoonPct:16,postmonsoonPct:8,
+  monsoonRF:428,premonsoonRF:104,postmonsoonRF:52,
+  districts:[
+    {name:"Amritsar",rf:680,monsoon:476,lpa:700,trend:"↘ -1.8%"},
+    {name:"Ludhiana",rf:640,monsoon:448,lpa:660,trend:"↘ -2.1%"},
+    {name:"Jalandhar",rf:660,monsoon:462,lpa:680,trend:"↘ -1.9%"},
+    {name:"Patiala",rf:580,monsoon:406,lpa:600,trend:"↘ -2.6%"},
+    {name:"Gurdaspur",rf:850,monsoon:595,lpa:870,trend:"↘ -1.4%"},
+    {name:"Pathankot",rf:1100,monsoon:770,lpa:1050,trend:"↗ +0.9%"},
+    {name:"Hoshiarpur",rf:920,monsoon:644,lpa:900,trend:"↗ +0.7%"},
+    {name:"Roopnagar",rf:820,monsoon:574,lpa:840,trend:"↘ -1.6%"},
+    {name:"SAS Nagar (Mohali)",rf:740,monsoon:518,lpa:760,trend:"↘ -1.9%"},
+    {name:"Fatehgarh Sahib",rf:680,monsoon:476,lpa:700,trend:"↘ -2.2%"},
+    {name:"Sangrur",rf:560,monsoon:392,lpa:580,trend:"↘ -2.8%"},
+    {name:"Barnala",rf:520,monsoon:364,lpa:540,trend:"↘ -3.1%"},
+    {name:"Bathinda",rf:440,monsoon:308,lpa:460,trend:"↘ -3.1%"},
+    {name:"Muktsar",rf:440,monsoon:308,lpa:460,trend:"↘ -3.4%"},
+    {name:"Fazilka",rf:400,monsoon:280,lpa:420,trend:"↘ -3.8%"},
+    {name:"Ferozepur",rf:420,monsoon:294,lpa:440,trend:"↘ -3.6%"},
+    {name:"Kapurthala",rf:700,monsoon:490,lpa:720,trend:"↘ -2.0%"},
+    {name:"Nawanshahr",rf:860,monsoon:602,lpa:880,trend:"↘ -1.5%"},
+    {name:"Tarn Taran",rf:640,monsoon:448,lpa:660,trend:"↘ -2.0%"},
+    {name:"Moga",rf:560,monsoon:392,lpa:580,trend:"↘ -2.7%"},
+    {name:"Malerkotla",rf:540,monsoon:378,lpa:560,trend:"↘ -2.9%"},
+    {name:"Firozpur",rf:420,monsoon:294,lpa:440,trend:"↘ -3.5%"},
+  ],
+  events:[
+    {year:"2023",title:"Punjab Floods",desc:"Record August 2023 rainfall. Sutlej, Beas rivers overflow. 200,000 acres of crops submerged.",sev:"sev-extreme"},
+    {year:"2019",title:"Cloudbursts — Amritsar",desc:"180mm in 3 hours in Amritsar. Urban flash floods.",sev:"sev-moderate"},
+    {year:"2014",title:"Severe Drought Year",desc:"Punjab received 45% below LPA. Groundwater crisis deepened.",sev:"sev-high"},
+    {year:"1993",title:"Historical Sutlej Floods",desc:"Major floods along Sutlej. Multiple districts inundated for weeks.",sev:"sev-high"},
+  ]
+},
+
+"Rajasthan": {
+  coords:[27.0238,74.2179],zoom:6,region:"North-West India",climate:"Arid to Semi-Arid",
+  lpa:313,annual2024:298,status:"Deficient",
+  monsoonPct:76,premonsoonPct:6,postmonsoonPct:6,
+  monsoonRF:227,premonsoonRF:19,postmonsoonRF:18,
+  districts:[
+    {name:"Jaipur",rf:540,monsoon:411,lpa:520,trend:"↗ +0.6%"},
+    {name:"Jodhpur",rf:280,monsoon:213,lpa:300,trend:"↘ -2.1%"},
+    {name:"Udaipur",rf:620,monsoon:471,lpa:600,trend:"→ +0.1%"},
+    {name:"Kota",rf:710,monsoon:540,lpa:690,trend:"↗ +0.9%"},
+    {name:"Ajmer",rf:470,monsoon:357,lpa:460,trend:"↗ +0.5%"},
+    {name:"Bikaner",rf:190,monsoon:144,lpa:200,trend:"↘ -1.8%"},
+    {name:"Barmer",rf:180,monsoon:137,lpa:190,trend:"↘ -2.4%"},
+    {name:"Jaisalmer",rf:110,monsoon:84,lpa:120,trend:"↘ -3.1%"},
+    {name:"Bhilwara",rf:520,monsoon:395,lpa:500,trend:"↗ +0.4%"},
+    {name:"Churu",rf:280,monsoon:213,lpa:300,trend:"↘ -2.8%"},
+    {name:"Sikar",rf:400,monsoon:304,lpa:420,trend:"↘ -2.4%"},
+    {name:"Jhunjhunu",rf:380,monsoon:289,lpa:400,trend:"↘ -2.6%"},
+    {name:"Alwar",rf:560,monsoon:426,lpa:540,trend:"↗ +0.5%"},
+    {name:"Bharatpur",rf:640,monsoon:486,lpa:620,trend:"↗ +0.4%"},
+    {name:"Sawai Madhopur",rf:640,monsoon:486,lpa:620,trend:"↗ +0.4%"},
+    {name:"Tonk",rf:520,monsoon:395,lpa:500,trend:"↗ +0.3%"},
+    {name:"Bundi",rf:640,monsoon:486,lpa:620,trend:"↗ +0.5%"},
+    {name:"Baran",rf:760,monsoon:578,lpa:740,trend:"↗ +0.6%"},
+    {name:"Jhalawar",rf:780,monsoon:593,lpa:760,trend:"↗ +0.7%"},
+    {name:"Pali",rf:360,monsoon:274,lpa:380,trend:"↘ -3.2%"},
+    {name:"Sirohi",rf:380,monsoon:289,lpa:400,trend:"↘ -3.0%"},
+    {name:"Banswara",rf:680,monsoon:517,lpa:660,trend:"↗ +0.4%"},
+    {name:"Dungarpur",rf:640,monsoon:486,lpa:620,trend:"↗ +0.4%"},
+    {name:"Chittorgarh",rf:580,monsoon:441,lpa:560,trend:"↗ +0.4%"},
+    {name:"Rajsamand",rf:560,monsoon:426,lpa:540,trend:"↗ +0.4%"},
+    {name:"Hanumangarh",rf:250,monsoon:190,lpa:270,trend:"↘ -4.1%"},
+    {name:"Ganganagar",rf:230,monsoon:175,lpa:260,trend:"↘ -5.0%"},
+    {name:"Nagaur",rf:340,monsoon:258,lpa:360,trend:"↘ -3.0%"},
+    {name:"Dausa",rf:540,monsoon:411,lpa:520,trend:"↗ +0.5%"},
+    {name:"Karauli",rf:640,monsoon:486,lpa:620,trend:"↗ +0.4%"},
+    {name:"Dholpur",rf:660,monsoon:502,lpa:640,trend:"↗ +0.4%"},
+    {name:"Jalor",rf:320,monsoon:243,lpa:340,trend:"↘ -3.6%"},
+    {name:"Pratapgarh",rf:700,monsoon:532,lpa:680,trend:"↗ +0.4%"},
+  ],
+  events:[
+    {year:"2017",title:"Rajasthan Flood Surge",desc:"180% of LPA in August 2017. Flash floods in Barmer & Jaisalmer — rare desert event.",sev:"sev-extreme"},
+    {year:"2019",title:"Barmer Floods",desc:"400mm in 48 hours — 3× the annual average. Widespread displacement.",sev:"sev-high"},
+    {year:"2023",title:"Western Rajasthan Flash Floods",desc:"Cyclone remnant moisture caused extreme precipitation in typically arid Jaisalmer belt.",sev:"sev-moderate"},
+    {year:"2002",title:"Severe Drought",desc:"Thar Desert region received only 30% of LPA. Agricultural crisis.",sev:"sev-high"},
+  ]
+},
+
+"Sikkim": {
+  coords:[27.5330,88.5122],zoom:8,region:"North-East India",climate:"Alpine to Sub-tropical",
+  lpa:2600,annual2024:2750,status:"Excess",
+  monsoonPct:62,premonsoonPct:20,postmonsoonPct:14,
+  monsoonRF:1612,premonsoonRF:520,postmonsoonRF:364,
+  districts:[
+    {name:"East Sikkim",rf:2800,monsoon:1736,lpa:2650,trend:"↗ +1.4%"},
+    {name:"West Sikkim",rf:3200,monsoon:1984,lpa:3050,trend:"↗ +1.6%"},
+    {name:"North Sikkim",rf:2200,monsoon:1364,lpa:2080,trend:"↗ +1.2%"},
+    {name:"South Sikkim",rf:2900,monsoon:1798,lpa:2760,trend:"↗ +1.5%"},
+    {name:"Pakyong",rf:2700,monsoon:1674,lpa:2560,trend:"↗ +1.3%"},
+    {name:"Soreng",rf:3100,monsoon:1922,lpa:2960,trend:"↗ +1.5%"},
+    {name:"Gangtok",rf:2850,monsoon:1767,lpa:2700,trend:"↗ +1.4%"},
+    {name:"Namchi",rf:2800,monsoon:1736,lpa:2650,trend:"↗ +1.4%"},
+  ],
+  events:[
+    {year:"2023",title:"Sikkim GLOf & Floods",desc:"Glacial lake outburst flood in Teesta basin. Record October rainfall. Widespread destruction.",sev:"sev-extreme"},
+    {year:"2021",title:"Sikkim Landslides",desc:"Record monsoon triggered multiple landslides. North Sikkim cut off for weeks.",sev:"sev-high"},
+    {year:"2011",title:"Sikkim Earthquake + Floods",desc:"Earthquake followed by extreme rainfall — compound disaster.",sev:"sev-high"},
+  ]
+},
+
+"Tamil Nadu": {
+  coords:[11.1271,78.6569],zoom:6,region:"South India",climate:"Tropical Wet & Dry",
+  lpa:925,annual2024:1005,status:"Excess",
+  monsoonPct:49,premonsoonPct:13,postmonsoonPct:34,
+  monsoonRF:453,premonsoonRF:120,postmonsoonRF:314,
+  districts:[
+    {name:"Chennai",rf:1400,monsoon:380,lpa:1200,trend:"↗ +2.8%"},
+    {name:"Kancheepuram",rf:1150,monsoon:380,lpa:1050,trend:"↗ +1.9%"},
+    {name:"Chengalpattu",rf:1100,monsoon:363,lpa:1000,trend:"↗ +1.8%"},
+    {name:"Villupuram",rf:1050,monsoon:347,lpa:960,trend:"↗ +1.5%"},
+    {name:"Cuddalore",rf:1200,monsoon:396,lpa:1100,trend:"↗ +1.6%"},
+    {name:"Nagapattinam",rf:1350,monsoon:446,lpa:1240,trend:"↗ +1.7%"},
+    {name:"Thanjavur",rf:980,monsoon:323,lpa:930,trend:"↗ +0.8%"},
+    {name:"Tiruchirappalli",rf:820,monsoon:271,lpa:780,trend:"↗ +0.6%"},
+    {name:"Madurai",rf:820,monsoon:271,lpa:790,trend:"↗ +0.7%"},
+    {name:"Virudhunagar",rf:780,monsoon:257,lpa:750,trend:"↗ +0.5%"},
+    {name:"Tirunelveli",rf:800,monsoon:264,lpa:760,trend:"↘ -0.9%"},
+    {name:"Thoothukudi",rf:720,monsoon:238,lpa:700,trend:"↘ -0.7%"},
+    {name:"Ramanathapuram",rf:820,monsoon:271,lpa:800,trend:"↗ +0.4%"},
+    {name:"Sivaganga",rf:840,monsoon:277,lpa:810,trend:"↗ +0.5%"},
+    {name:"Dindigul",rf:850,monsoon:281,lpa:820,trend:"↗ +0.6%"},
+    {name:"Coimbatore",rf:680,monsoon:224,lpa:650,trend:"↗ +1.1%"},
+    {name:"Tiruppur",rf:700,monsoon:231,lpa:670,trend:"↗ +0.9%"},
+    {name:"Erode",rf:750,monsoon:248,lpa:720,trend:"↗ +0.7%"},
+    {name:"Salem",rf:780,monsoon:257,lpa:750,trend:"↗ +0.5%"},
+    {name:"Namakkal",rf:760,monsoon:251,lpa:730,trend:"↗ +0.5%"},
+    {name:"Dharmapuri",rf:900,monsoon:297,lpa:870,trend:"↗ +0.6%"},
+    {name:"Krishnagiri",rf:960,monsoon:317,lpa:920,trend:"↗ +0.7%"},
+    {name:"Vellore",rf:940,monsoon:310,lpa:900,trend:"↗ +1.2%"},
+    {name:"Ranipet",rf:960,monsoon:317,lpa:920,trend:"↗ +1.1%"},
+    {name:"Tirupattur",rf:980,monsoon:323,lpa:940,trend:"↗ +1.0%"},
+    {name:"Tiruvannamalai",rf:1000,monsoon:330,lpa:960,trend:"↗ +1.0%"},
+    {name:"Kallakurichi",rf:1020,monsoon:337,lpa:980,trend:"↗ +1.0%"},
+    {name:"Perambalur",rf:780,monsoon:257,lpa:750,trend:"↗ +0.5%"},
+    {name:"Ariyalur",rf:880,monsoon:290,lpa:850,trend:"↗ +0.6%"},
+    {name:"Karur",rf:760,monsoon:251,lpa:730,trend:"↗ +0.5%"},
+    {name:"Pudukkottai",rf:820,monsoon:271,lpa:790,trend:"↗ +0.5%"},
+    {name:"Nilgiris",rf:1900,monsoon:627,lpa:1800,trend:"↗ +1.4%"},
+    {name:"Kanyakumari",rf:1650,monsoon:545,lpa:1580,trend:"↗ +1.0%"},
+    {name:"Tiruvarur",rf:1100,monsoon:363,lpa:1050,trend:"↗ +0.9%"},
+    {name:"Mayiladuthurai",rf:1200,monsoon:396,lpa:1150,trend:"↗ +0.8%"},
+    {name:"Theni",rf:900,monsoon:297,lpa:860,trend:"↗ +0.8%"},
+    {name:"Tenkasi",rf:980,monsoon:323,lpa:940,trend:"↗ +0.6%"},
+    {name:"Kanniyakumari",rf:1640,monsoon:541,lpa:1580,trend:"↗ +0.8%"},
+  ],
+  events:[
+    {year:"2015",title:"Chennai Mega Floods",desc:"December 2015 — 490mm in 24 hours. Worst flooding in 100 years. Airport submerged.",sev:"sev-extreme"},
+    {year:"2023",title:"Cyclone Michaung",desc:"Rare landfall in Tamil Nadu coast. Extreme rainfall to Chennai and surrounds.",sev:"sev-extreme"},
+    {year:"2021",title:"NE Monsoon 2021",desc:"Multiple districts received 200%+ of seasonal normal. Widespread flooding.",sev:"sev-high"},
+    {year:"2016",title:"Cyclone Vardah",desc:"Made landfall near Chennai. 200mm in hours. Widespread destruction.",sev:"sev-high"},
+  ]
+},
+
+"Telangana": {
+  coords:[17.1232,79.2088],zoom:6,region:"South India",climate:"Tropical Wet & Dry",
+  lpa:1060,annual2024:1120,status:"Excess",
+  monsoonPct:69,premonsoonPct:12,postmonsoonPct:16,
+  monsoonRF:731,premonsoonRF:127,postmonsoonRF:170,
+  districts:[
+    {name:"Hyderabad",rf:820,monsoon:566,lpa:790,trend:"↗ +0.6%"},
+    {name:"Rangareddy",rf:850,monsoon:587,lpa:820,trend:"↗ +0.5%"},
+    {name:"Medchal-Malkajgiri",rf:840,monsoon:580,lpa:810,trend:"↗ +0.5%"},
+    {name:"Karimnagar",rf:1050,monsoon:725,lpa:1000,trend:"↗ +0.8%"},
+    {name:"Warangal Urban",rf:1080,monsoon:745,lpa:1030,trend:"↗ +0.9%"},
+    {name:"Warangal Rural",rf:1060,monsoon:731,lpa:1010,trend:"↗ +0.8%"},
+    {name:"Nizamabad",rf:1020,monsoon:704,lpa:970,trend:"↗ +0.7%"},
+    {name:"Adilabad",rf:1100,monsoon:759,lpa:1050,trend:"↗ +0.9%"},
+    {name:"Khammam",rf:1200,monsoon:828,lpa:1140,trend:"↗ +1.1%"},
+    {name:"Nalgonda",rf:880,monsoon:607,lpa:840,trend:"↗ +0.6%"},
+    {name:"Mahbubnagar (Wanaparthy)",rf:780,monsoon:538,lpa:750,trend:"↗ +0.4%"},
+    {name:"Nagarkurnool",rf:820,monsoon:566,lpa:790,trend:"↗ +0.4%"},
+    {name:"Narsampet (Mahabubabad)",rf:1100,monsoon:759,lpa:1050,trend:"↗ +0.8%"},
+    {name:"Mulugu",rf:1200,monsoon:828,lpa:1140,trend:"↗ +1.0%"},
+    {name:"Bhadradri Kothagudem",rf:1280,monsoon:883,lpa:1220,trend:"↗ +1.1%"},
+    {name:"Suryapet",rf:950,monsoon:656,lpa:910,trend:"↗ +0.6%"},
+    {name:"Yadadri Bhongir",rf:900,monsoon:621,lpa:860,trend:"↗ +0.5%"},
+    {name:"Sangareddy",rf:840,monsoon:580,lpa:800,trend:"↗ +0.5%"},
+    {name:"Medak",rf:820,monsoon:566,lpa:790,trend:"↗ +0.4%"},
+    {name:"Vikarabad",rf:880,monsoon:607,lpa:840,trend:"↗ +0.5%"},
+    {name:"Jogulamba Gadwal",rf:700,monsoon:483,lpa:680,trend:"↗ +0.3%"},
+    {name:"Kamareddy",rf:900,monsoon:621,lpa:860,trend:"↗ +0.6%"},
+    {name:"Rajanna Sircilla",rf:1000,monsoon:690,lpa:960,trend:"↗ +0.7%"},
+    {name:"Jayashankar Bhupalpally",rf:1150,monsoon:794,lpa:1100,trend:"↗ +0.9%"},
+    {name:"Kumuram Bheem Asifabad",rf:1100,monsoon:759,lpa:1050,trend:"↗ +0.8%"},
+    {name:"Mancherial",rf:1080,monsoon:745,lpa:1030,trend:"↗ +0.8%"},
+    {name:"Peddapalli",rf:1060,monsoon:731,lpa:1010,trend:"↗ +0.7%"},
+    {name:"Jagtial",rf:1000,monsoon:690,lpa:950,trend:"↗ +0.7%"},
+    {name:"Nirmal",rf:1020,monsoon:704,lpa:970,trend:"↗ +0.7%"},
+    {name:"Narayanpet",rf:720,monsoon:497,lpa:700,trend:"↗ +0.3%"},
+    {name:"Wanaparthy",rf:780,monsoon:538,lpa:750,trend:"↗ +0.4%"},
+    {name:"Hanamkonda",rf:1080,monsoon:745,lpa:1030,trend:"↗ +0.9%"},
+  ],
+  events:[
+    {year:"2020",title:"Telangana Mega Floods",desc:"All-time record rainfall in October 2020. Hyderabad submerged. 50+ deaths, ₹5000cr damage.",sev:"sev-extreme"},
+    {year:"2021",title:"Godavari Extreme Floods",desc:"Record Godavari discharge — 150-year high near Bhadrachalam. Massive evacuation.",sev:"sev-extreme"},
+    {year:"2016",title:"Hyderabad Flash Floods",desc:"Musi river in spate. Low-lying areas flooded. Urban drainage overwhelmed.",sev:"sev-high"},
+  ]
+},
+
+"Tripura": {
+  coords:[23.9408,91.9882],zoom:7,region:"North-East India",climate:"Sub-tropical Humid",
+  lpa:2000,annual2024:2100,status:"Normal",
+  monsoonPct:74,premonsoonPct:13,postmonsoonPct:10,
+  monsoonRF:1480,premonsoonRF:260,postmonsoonRF:200,
+  districts:[
+    {name:"West Tripura (Agartala)",rf:2050,monsoon:1517,lpa:1980,trend:"↗ +0.8%"},
+    {name:"North Tripura",rf:2200,monsoon:1628,lpa:2120,trend:"↗ +0.9%"},
+    {name:"South Tripura",rf:2100,monsoon:1554,lpa:2020,trend:"↗ +0.8%"},
+    {name:"Dhalai",rf:2300,monsoon:1702,lpa:2220,trend:"↗ +1.0%"},
+    {name:"Khowai",rf:2050,monsoon:1517,lpa:1980,trend:"↗ +0.8%"},
+    {name:"Gomati",rf:2000,monsoon:1480,lpa:1930,trend:"↗ +0.8%"},
+    {name:"Sipahijala",rf:2100,monsoon:1554,lpa:2020,trend:"↗ +0.8%"},
+    {name:"Unakoti",rf:2200,monsoon:1628,lpa:2120,trend:"↗ +0.9%"},
+  ],
+  events:[
+    {year:"2023",title:"Tripura Floods",desc:"Record monsoon 2023. Haora and Khowai rivers flooded. Over 70,000 displaced.",sev:"sev-high"},
+    {year:"2017",title:"Agartala Flash Floods",desc:"Extreme rainfall caused urban flooding in capital. Infrastructure damage.",sev:"sev-moderate"},
+  ]
+},
+
+"Uttar Pradesh": {
+  coords:[26.8467,80.9462],zoom:6,region:"North India",climate:"Humid Subtropical",
+  lpa:1025,annual2024:978,status:"Deficient",
+  monsoonPct:78,premonsoonPct:11,postmonsoonPct:8,
+  monsoonRF:799,premonsoonRF:113,postmonsoonRF:82,
+  districts:[
+    {name:"Lucknow",rf:1000,monsoon:780,lpa:970,trend:"↘ -1.4%"},
+    {name:"Kanpur",rf:860,monsoon:671,lpa:840,trend:"↘ -1.8%"},
+    {name:"Agra",rf:680,monsoon:530,lpa:700,trend:"↘ -2.6%"},
+    {name:"Varanasi",rf:1050,monsoon:819,lpa:1020,trend:"↘ -1.2%"},
+    {name:"Prayagraj (Allahabad)",rf:1020,monsoon:796,lpa:990,trend:"↘ -1.4%"},
+    {name:"Meerut",rf:880,monsoon:686,lpa:900,trend:"↘ -2.2%"},
+    {name:"Ghaziabad",rf:840,monsoon:655,lpa:860,trend:"↘ -2.4%"},
+    {name:"Gautam Buddh Nagar",rf:820,monsoon:640,lpa:840,trend:"↘ -2.6%"},
+    {name:"Noida (Gautam Buddh)",rf:820,monsoon:640,lpa:840,trend:"↘ -2.5%"},
+    {name:"Bareilly",rf:1020,monsoon:796,lpa:990,trend:"↘ -1.4%"},
+    {name:"Moradabad",rf:1060,monsoon:827,lpa:1030,trend:"↘ -1.2%"},
+    {name:"Saharanpur",rf:1120,monsoon:874,lpa:1090,trend:"↘ -1.0%"},
+    {name:"Muzaffarnagar",rf:960,monsoon:749,lpa:930,trend:"↘ -1.6%"},
+    {name:"Bulandshahr",rf:840,monsoon:655,lpa:860,trend:"↘ -2.3%"},
+    {name:"Aligarh",rf:780,monsoon:608,lpa:800,trend:"↘ -2.8%"},
+    {name:"Mathura",rf:700,monsoon:546,lpa:720,trend:"↘ -2.8%"},
+    {name:"Hathras",rf:740,monsoon:577,lpa:760,trend:"↘ -2.6%"},
+    {name:"Mainpuri",rf:780,monsoon:608,lpa:800,trend:"↘ -2.5%"},
+    {name:"Firozabad",rf:760,monsoon:593,lpa:780,trend:"↘ -2.6%"},
+    {name:"Etawah",rf:780,monsoon:608,lpa:800,trend:"↘ -2.4%"},
+    {name:"Kanpur Dehat",rf:840,monsoon:655,lpa:860,trend:"↘ -2.0%"},
+    {name:"Fatehpur",rf:920,monsoon:718,lpa:890,trend:"↘ -1.6%"},
+    {name:"Rae Bareli",rf:960,monsoon:749,lpa:930,trend:"↘ -1.4%"},
+    {name:"Unnao",rf:960,monsoon:749,lpa:930,trend:"↘ -1.5%"},
+    {name:"Sitapur",rf:1000,monsoon:780,lpa:970,trend:"↘ -1.3%"},
+    {name:"Hardoi",rf:980,monsoon:764,lpa:950,trend:"↘ -1.4%"},
+    {name:"Farrukhabad",rf:860,monsoon:671,lpa:880,trend:"↘ -2.0%"},
+    {name:"Kannauj",rf:860,monsoon:671,lpa:880,trend:"↘ -1.9%"},
+    {name:"Lakhimpur Kheri",rf:1080,monsoon:842,lpa:1050,trend:"↘ -1.1%"},
+    {name:"Bahraich",rf:1100,monsoon:858,lpa:1070,trend:"↘ -1.0%"},
+    {name:"Shravasti",rf:1120,monsoon:874,lpa:1090,trend:"↘ -0.9%"},
+    {name:"Gonda",rf:1080,monsoon:842,lpa:1050,trend:"↘ -1.0%"},
+    {name:"Balrampur",rf:1150,monsoon:897,lpa:1120,trend:"↘ -0.8%"},
+    {name:"Basti",rf:1100,monsoon:858,lpa:1070,trend:"↘ -0.9%"},
+    {name:"Siddharthnagar",rf:1150,monsoon:897,lpa:1120,trend:"↘ -0.8%"},
+    {name:"Sant Kabir Nagar",rf:1100,monsoon:858,lpa:1070,trend:"↘ -0.9%"},
+    {name:"Maharajganj",rf:1200,monsoon:936,lpa:1170,trend:"↘ -0.7%"},
+    {name:"Gorakhpur",rf:1200,monsoon:936,lpa:1170,trend:"↘ -0.8%"},
+    {name:"Deoria",rf:1180,monsoon:920,lpa:1150,trend:"↘ -0.8%"},
+    {name:"Kushinagar",rf:1200,monsoon:936,lpa:1170,trend:"↘ -0.7%"},
+    {name:"Azamgarh",rf:1080,monsoon:842,lpa:1050,trend:"↘ -1.1%"},
+    {name:"Mau",rf:1080,monsoon:842,lpa:1050,trend:"↘ -1.0%"},
+    {name:"Ballia",rf:1100,monsoon:858,lpa:1070,trend:"↘ -0.9%"},
+    {name:"Jaunpur",rf:1040,monsoon:811,lpa:1010,trend:"↘ -1.1%"},
+    {name:"Ghazipur",rf:1060,monsoon:827,lpa:1030,trend:"↘ -1.1%"},
+    {name:"Chandauli",rf:1080,monsoon:842,lpa:1050,trend:"↘ -1.0%"},
+    {name:"Bhadohi",rf:1020,monsoon:796,lpa:990,trend:"↘ -1.2%"},
+    {name:"Mirzapur",rf:1020,monsoon:796,lpa:990,trend:"↘ -1.2%"},
+    {name:"Sonbhadra",rf:1080,monsoon:842,lpa:1050,trend:"↘ -1.1%"},
+    {name:"Chitrakoot",rf:1020,monsoon:796,lpa:990,trend:"↘ -1.2%"},
+    {name:"Banda",rf:860,monsoon:671,lpa:880,trend:"↘ -2.1%"},
+    {name:"Hamirpur",rf:840,monsoon:655,lpa:860,trend:"↘ -2.2%"},
+    {name:"Mahoba",rf:800,monsoon:624,lpa:820,trend:"↘ -2.4%"},
+    {name:"Jalaun",rf:800,monsoon:624,lpa:820,trend:"↘ -2.4%"},
+    {name:"Jhansi",rf:840,monsoon:655,lpa:860,trend:"↘ -2.2%"},
+    {name:"Lalitpur",rf:880,monsoon:686,lpa:900,trend:"↘ -2.0%"},
+    {name:"Amroha",rf:1020,monsoon:796,lpa:990,trend:"↘ -1.3%"},
+    {name:"Rampur",rf:1040,monsoon:811,lpa:1010,trend:"↘ -1.2%"},
+    {name:"Pilibhit",rf:1120,monsoon:874,lpa:1090,trend:"↘ -1.0%"},
+    {name:"Shahjahanpur",rf:980,monsoon:764,lpa:950,trend:"↘ -1.4%"},
+    {name:"Badaun",rf:920,monsoon:718,lpa:900,trend:"↘ -1.8%"},
+    {name:"Hapur",rf:840,monsoon:655,lpa:860,trend:"↘ -2.2%"},
+    {name:"Sambhal",rf:900,monsoon:702,lpa:920,trend:"↘ -2.0%"},
+    {name:"Etah",rf:800,monsoon:624,lpa:820,trend:"↘ -2.4%"},
+    {name:"Kasganj",rf:800,monsoon:624,lpa:820,trend:"↘ -2.4%"},
+    {name:"Auraiya",rf:820,monsoon:640,lpa:840,trend:"↘ -2.2%"},
+    {name:"Kaushambi",rf:980,monsoon:764,lpa:950,trend:"↘ -1.5%"},
+    {name:"Pratapgarh",rf:980,monsoon:764,lpa:950,trend:"↘ -1.4%"},
+    {name:"Ambedkar Nagar",rf:1060,monsoon:827,lpa:1030,trend:"↘ -1.1%"},
+    {name:"Amethi",rf:960,monsoon:749,lpa:930,trend:"↘ -1.5%"},
+    {name:"Sultanpur",rf:980,monsoon:764,lpa:950,trend:"↘ -1.4%"},
+    {name:"Barabanki",rf:1020,monsoon:796,lpa:990,trend:"↘ -1.3%"},
+    {name:"Ayodhya (Faizabad)",rf:1020,monsoon:796,lpa:990,trend:"↘ -1.3%"},
+    {name:"Bijnor",rf:1000,monsoon:780,lpa:970,trend:"↘ -1.4%"},
+  ],
+  events:[
+    {year:"2023",title:"UP Monsoon Floods",desc:"Record rainfall across eastern UP. Ghaghra, Rapti, Sharda rivers in severe spate. 150+ deaths.",sev:"sev-extreme"},
+    {year:"2019",title:"Bundelkhand Drought",desc:"Jhansi, Lalitpur, Hamirpur received 52% of LPA. Acute water scarcity.",sev:"sev-high"},
+    {year:"2017",title:"Eastern UP Floods",desc:"Back-to-back rainfall events. Varanasi, Ballia, Deoria severely flooded.",sev:"sev-high"},
+    {year:"2000",title:"UP Drought",desc:"Widespread deficit monsoon. 42 districts declared drought-hit.",sev:"sev-high"},
+  ]
+},
+
+"Uttarakhand": {
+  coords:[30.0668,79.0193],zoom:7,region:"North India",climate:"Alpine to Sub-tropical",
+  lpa:1600,annual2024:1750,status:"Excess",
+  monsoonPct:58,premonsoonPct:24,postmonsoonPct:13,
+  monsoonRF:928,premonsoonRF:384,postmonsoonRF:208,
+  districts:[
+    {name:"Dehradun",rf:2200,monsoon:1276,lpa:2050,trend:"↗ +2.2%"},
+    {name:"Haridwar",rf:1600,monsoon:928,lpa:1500,trend:"↗ +1.8%"},
+    {name:"Nainital",rf:2400,monsoon:1392,lpa:2250,trend:"↗ +2.0%"},
+    {name:"Almora",rf:1400,monsoon:812,lpa:1320,trend:"↗ +1.6%"},
+    {name:"Bageshwar",rf:1500,monsoon:870,lpa:1420,trend:"↗ +1.5%"},
+    {name:"Pithoragarh",rf:1600,monsoon:928,lpa:1520,trend:"↗ +1.4%"},
+    {name:"Champawat",rf:1800,monsoon:1044,lpa:1700,trend:"↗ +1.8%"},
+    {name:"Udham Singh Nagar",rf:1500,monsoon:870,lpa:1400,trend:"↗ +1.6%"},
+    {name:"Pauri Garhwal",rf:1900,monsoon:1102,lpa:1800,trend:"↗ +1.7%"},
+    {name:"Tehri Garhwal",rf:2000,monsoon:1160,lpa:1880,trend:"↗ +1.9%"},
+    {name:"Uttarkashi",rf:1800,monsoon:1044,lpa:1700,trend:"↗ +1.8%"},
+    {name:"Chamoli",rf:1700,monsoon:986,lpa:1600,trend:"↗ +1.6%"},
+    {name:"Rudraprayag",rf:2100,monsoon:1218,lpa:1980,trend:"↗ +2.1%"},
+    {name:"Haridwar",rf:1580,monsoon:916,lpa:1480,trend:"↗ +1.7%"},
+  ],
+  events:[
+    {year:"2013",title:"Kedarnath Flash Floods",desc:"June 2013 — worst disaster in Himalayan history. 5,700+ deaths. Entire Kedar valley devastated.",sev:"sev-extreme"},
+    {year:"2021",title:"Chamoli Glacier Burst",desc:"Glacial lake outburst flood in Chamoli. Flash flood down Dhauliganga river. 200+ casualties.",sev:"sev-extreme"},
+    {year:"2022",title:"Nainital Floods",desc:"Record October rainfall. Nainital lake overflowed. Multiple landslides.",sev:"sev-high"},
+    {year:"2023",title:"Joshimath Subsidence",desc:"Extreme monsoon accelerated ground sinking. Multiple structures cracked.",sev:"sev-high"},
+  ]
+},
+
+"West Bengal": {
+  coords:[22.9868,87.8550],zoom:6,region:"East India",climate:"Tropical Monsoon",
+  lpa:1582,annual2024:1640,status:"Normal",
+  monsoonPct:73,premonsoonPct:12,postmonsoonPct:10,
+  monsoonRF:1197,premonsoonRF:197,postmonsoonRF:164,
+  districts:[
+    {name:"Darjeeling",rf:3200,monsoon:2336,lpa:3000,trend:"↗ +1.2%"},
+    {name:"Kalimpong",rf:3000,monsoon:2190,lpa:2800,trend:"↗ +1.4%"},
+    {name:"Jalpaiguri",rf:2800,monsoon:2044,lpa:2700,trend:"↗ +0.8%"},
+    {name:"Alipurduar",rf:3000,monsoon:2190,lpa:2880,trend:"↗ +1.1%"},
+    {name:"Cooch Behar",rf:2500,monsoon:1825,lpa:2400,trend:"↗ +0.9%"},
+    {name:"North Dinajpur",rf:1800,monsoon:1314,lpa:1720,trend:"↗ +0.8%"},
+    {name:"South Dinajpur",rf:1650,monsoon:1205,lpa:1580,trend:"↗ +0.7%"},
+    {name:"Malda",rf:1600,monsoon:1168,lpa:1540,trend:"↗ +0.6%"},
+    {name:"Murshidabad",rf:1350,monsoon:986,lpa:1300,trend:"→ +0.2%"},
+    {name:"Birbhum",rf:1380,monsoon:1008,lpa:1320,trend:"↗ +0.6%"},
+    {name:"Nadia",rf:1550,monsoon:1132,lpa:1490,trend:"↗ +0.7%"},
+    {name:"North 24 Parganas",rf:1600,monsoon:1168,lpa:1550,trend:"↗ +0.6%"},
+    {name:"Kolkata",rf:1650,monsoon:1205,lpa:1600,trend:"→ +0.3%"},
+    {name:"South 24 Parganas",rf:1720,monsoon:1256,lpa:1680,trend:"↗ +0.9%"},
+    {name:"Howrah",rf:1580,monsoon:1154,lpa:1540,trend:"↗ +0.5%"},
+    {name:"Hooghly",rf:1520,monsoon:1110,lpa:1480,trend:"↗ +0.5%"},
+    {name:"Bankura",rf:1380,monsoon:1008,lpa:1350,trend:"↘ -0.8%"},
+    {name:"Puruliya",rf:1240,monsoon:905,lpa:1200,trend:"↘ -1.1%"},
+    {name:"Paschim Midnapore",rf:1550,monsoon:1132,lpa:1510,trend:"↗ +0.5%"},
+    {name:"Purba Midnapore",rf:1580,monsoon:1154,lpa:1540,trend:"↗ +0.5%"},
+    {name:"Jhargram",rf:1480,monsoon:1081,lpa:1440,trend:"↗ +0.5%"},
+    {name:"Paschim Bardhaman",rf:1380,monsoon:1008,lpa:1340,trend:"↗ +0.5%"},
+    {name:"Purba Bardhaman",rf:1420,monsoon:1037,lpa:1380,trend:"↗ +0.5%"},
+  ],
+  events:[
+    {year:"2021",title:"Cyclone Yaas",desc:"Post-cyclone rainfall + storm surge devastated Sundarbans. Record coastal inundation.",sev:"sev-extreme"},
+    {year:"2020",title:"Cyclone Amphan",desc:"Super cyclone. 130+ deaths in WB. Record surge in Sundarbans. ₹1 lakh crore damage.",sev:"sev-extreme"},
+    {year:"2017",title:"North Bengal Floods",desc:"Teesta, Torsa rivers overflow. 500,000+ displaced. Cooch Behar worst affected.",sev:"sev-high"},
+    {year:"2015",title:"Darjeeling Cloudbursts",desc:"1200mm in 72 hours. Multiple landslides. Tea gardens severely damaged.",sev:"sev-high"},
+  ]
+}
+}; // end stateData
+
+// ─────────────────────────
+//  ALL STATES LIST
+// ─────────────────────────
+const allStates = Object.keys(stateData).sort();
+
+// National overview table for cards
+const stateOverview = allStates.map(name => {
+  const d = stateData[name];
+  const diff = ((d.annual2024 - d.lpa)/d.lpa*100).toFixed(1);
+  const maxRF = Math.max(...allStates.map(s=>stateData[s].annual2024));
+  return {
+    name,
+    rf: d.annual2024,
+    trend: (diff>=0?'+':'')+diff+'%',
+    fill: Math.round(d.annual2024/maxRF*100)
+  };
+});
+
+// ─────────────────────────
+//  RAIN CANVAS
+// ─────────────────────────
+const canvas = document.getElementById('rain-canvas');
+const ctx2d = canvas.getContext('2d');
+let drops = [];
+
+function initRain() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  drops = [];
+  for (let i = 0; i < 130; i++) {
+    drops.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      len: Math.random() * 22 + 8,
+      speed: Math.random() * 4.5 + 2,
+      opacity: Math.random() * 0.7 + 0.15
+    });
+  }
+}
+function animateRain() {
+  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  const theme = document.documentElement.getAttribute('data-theme');
+  const color = theme === 'light' ? '0,80,180' : '0,212,255';
+  drops.forEach(d => {
+    ctx2d.beginPath();
+    ctx2d.moveTo(d.x, d.y);
+    ctx2d.lineTo(d.x - 1, d.y + d.len);
+    ctx2d.strokeStyle = `rgba(${color},${d.opacity})`;
+    ctx2d.lineWidth = 1;
+    ctx2d.stroke();
+    d.y += d.speed;
+    if (d.y > canvas.height) { d.y = -d.len; d.x = Math.random() * canvas.width; }
+  });
+  requestAnimationFrame(animateRain);
+}
+window.addEventListener('resize', initRain);
+initRain();
+animateRain();
+
+// ─────────────────────────
+//  THEME TOGGLE
+// ─────────────────────────
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  document.getElementById('themeLabel').textContent = next === 'dark' ? '🌙 Dark' : '☀️ Light';
+  if (mapInstance) {
+    mapInstance.eachLayer(l => { if (l._url) l.redraw(); });
+  }
+});
+
+// ─────────────────────────
+//  SCROLL PROGRESS
+// ─────────────────────────
+window.addEventListener('scroll', () => {
+  const pct = (window.scrollY / (document.body.scrollHeight - window.innerHeight)) * 100;
+  document.getElementById('scrollLine').style.width = pct + '%';
+});
+
+// ─────────────────────────
+//  COUNTER ANIMATION
+// ─────────────────────────
+function animateCount(el, target, suffix='') {
+  let start = 0;
+  const step = Math.ceil(target / 50);
+  const t = setInterval(() => {
+    start = Math.min(start + step, target);
+    el.textContent = start + suffix;
+    if (start >= target) clearInterval(t);
+  }, 28);
+}
+setTimeout(() => {
+  const totalDistricts = allStates.reduce((s,n) => s + stateData[n].districts.length, 0);
+  const totalEvents = allStates.reduce((s,n) => s + stateData[n].events.length, 0);
+  animateCount(document.getElementById('cntStates'), allStates.length);
+  animateCount(document.getElementById('cntYears'), 35);
+  animateCount(document.getElementById('cntDistricts'), totalDistricts, '+');
+  animateCount(document.getElementById('cntEvents'), totalEvents, '+');
+}, 700);
+
+// ─────────────────────────
+//  SEARCH + AUTOCOMPLETE
+// ─────────────────────────
+const searchInput = document.getElementById('searchInput');
+const autocompleteList = document.getElementById('autocompleteList');
+
+searchInput.addEventListener('input', function() {
+  const val = this.value.toLowerCase();
+  if (!val) { autocompleteList.style.display = 'none'; return; }
+  const matches = allStates.filter(s => s.toLowerCase().includes(val));
+  if (!matches.length) { autocompleteList.style.display = 'none'; return; }
+  autocompleteList.innerHTML = matches.slice(0, 10).map((s,i) =>
+    `<div class="autocomplete-item" onclick="selectState('${s}')" data-idx="${i}">🗺 ${s}</div>`
+  ).join('');
+  autocompleteList.style.display = 'block';
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-container')) autocompleteList.style.display = 'none';
+});
+
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') triggerSearch();
+});
+
+function selectState(name) {
+  searchInput.value = name;
+  autocompleteList.style.display = 'none';
+  loadState(name);
+}
+
+function triggerSearch() {
+  const val = searchInput.value.trim();
+  autocompleteList.style.display = 'none';
+  const match = allStates.find(s => s.toLowerCase() === val.toLowerCase())
+    || allStates.find(s => s.toLowerCase().includes(val.toLowerCase()));
+  if (match) { searchInput.value = match; loadState(match); }
+  else alert('State not found. Please try a valid Indian state name.');
+}
+
+// ─────────────────────────
+//  STATE CHIPS
+// ─────────────────────────
+const chipsEl = document.getElementById('stateChips');
+// Show a curated selection of featured states
+const featured = ['Maharashtra','Kerala','Rajasthan','Punjab','West Bengal','Tamil Nadu','Assam','Gujarat','Karnataka','Odisha','Uttar Pradesh','Uttarakhand','Himachal Pradesh','Telangana','Bihar'];
+featured.forEach(s => {
+  const c = document.createElement('span');
+  c.className = 'chip';
+  c.textContent = s;
+  c.onclick = () => { searchInput.value = s; loadState(s); document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active')); c.classList.add('active'); };
+  chipsEl.appendChild(c);
+});
+
+// ─────────────────────────
+//  MAP
+// ─────────────────────────
+// ─────────────────────────────────────────
+//  MAP
+// ─────────────────────────────────────────
+let mapInstance = null;
+let mapMarker = null;
+let mapCircle = null;
+
+function initMap(lat, lng, zoom, stateName) {
+  if (!mapInstance) {
+    mapInstance = L.map('map', { zoomControl: true }).setView([lat, lng], zoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap',
+      maxZoom: 18
+    }).addTo(mapInstance);
+  } else {
+    mapInstance.flyTo([lat, lng], zoom, { duration: 1.4 });
+  }
+
+  if (mapMarker) mapInstance.removeLayer(mapMarker);
+  if (mapCircle) mapInstance.removeLayer(mapCircle);
+
+  const popupHTML = `<div style="font-family:'DM Mono',monospace; min-width:160px;">
+    <b style="font-size:0.9rem;">${stateName}</b><br>
+    <span style="font-size:0.72rem; color:#666;">📍 ${lat.toFixed(2)}°N, ${lng.toFixed(2)}°E</span><br>
+    <span style="font-size:0.72rem; margin-top:4px; display:block;">🌧 Annual RF: ${stateData[stateName].annual2024} mm</span>
+    <span style="font-size:0.72rem;">Status: ${stateData[stateName].status}</span>
+  </div>`;
+
+  mapMarker = L.marker([lat, lng])
+    .addTo(mapInstance)
+    .bindPopup(popupHTML, { maxWidth: 240 })
+    .openPopup();
+
+  mapCircle = L.circle([lat, lng], {
+    color: '#00c6ff', fillColor: '#00c6ff', fillOpacity: 0.08, radius: 150000, weight: 1
+  }).addTo(mapInstance);
+}
+
+
+
+
+
+// let mapInstance = null;
+// function initMap(lat, lng, zoom, stateName) {
+//   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+//   mapInstance = L.map('map', { zoomControl: true, scrollWheelZoom: false }).setView([lat, lng], zoom);
+//   const theme = document.documentElement.getAttribute('data-theme');
+//   L.tileLayer(
+//     theme === 'dark'
+//       ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+//       : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+//     { attribution: '© OpenStreetMap, © CartoDB', maxZoom: 18 }
+//   ).addTo(mapInstance);
+//   const data = stateData[stateName];
+//   const diff = ((data.annual2024 - data.lpa)/data.lpa*100).toFixed(1);
+//   L.marker([lat, lng]).addTo(mapInstance).bindPopup(`
+//     <div style="font-family:'DM Mono',monospace;font-size:0.8rem;padding:8px;min-width:200px">
+//       <strong style="font-size:1rem;font-family:'Syne',sans-serif">${stateName}</strong><br>
+//       <br>📊 Annual 2024: <strong>${data.annual2024} mm</strong><br>
+//       📏 LPA: ${data.lpa} mm<br>
+//       ${diff>=0?'📈':'📉'} Deviation: <strong>${diff>=0?'+':''}${diff}%</strong><br>
+//       🌧 Monsoon: ${data.monsoonRF} mm (${data.monsoonPct}%)<br>
+//       ☀️ Pre-Monsoon: ${data.premonsoonRF} mm<br>
+//       🍂 Post-Monsoon: ${data.postmonsoonRF} mm
+//     </div>
+//   `).openPopup();
+
+  // Add district markers
+//   data.districts.slice(0,8).forEach((d, i) => {
+//     const angle = (i/8)*2*Math.PI;
+//     const radius = 0.6;
+//     const dlat = lat + Math.sin(angle)*radius;
+//     const dlng = lng + Math.cos(angle)*radius;
+//     const pct = ((d.rf - d.lpa)/d.lpa*100).toFixed(1);
+//     const color = pct > 10 ? '#1de4a0' : pct < -10 ? '#f04444' : '#f5a623';
+//     const circle = L.circleMarker([dlat, dlng], {
+//       radius: 8, fillColor: color, color: color, weight: 2, opacity: 0.8, fillOpacity: 0.4
+//     }).addTo(mapInstance);
+//     circle.bindTooltip(`<strong>${d.name}</strong><br>${d.rf}mm · ${pct>=0?'+':''}${pct}% vs LPA`);
+//   });
+// }
+
+// ─────────────────────────
+//  CHART HELPERS
+// ─────────────────────────
+let chartInstances = {};
+function destroyCharts() {
+  Object.values(chartInstances).forEach(c => { if(c) c.destroy(); });
+  chartInstances = {};
+}
+function getChartColors() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return {
+    gridColor: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+    textColor: dark ? '#7aa3c0' : '#264a6b'
+  };
+}
+
+function buildTrendChart(stateName, data) {
+  const rand = seededRandom(stateName);
+  const years = [];
+  for (let y = 1990; y <= 2025; y++) years.push(y);
+  const {gridColor, textColor} = getChartColors();
+  const base = data.lpa;
+  const vals = years.map((y,i) => {
+    const t = i/35;
+    // return Math.round(base * (0.8 + t*0.25 + Math.sin(i*0.7)*0.15 + (Math.random()*0.22-0.11)));
+    return Math.round(base * (0.8 + t*0.25 + Math.sin(i*0.7)*0.15 + (rand()*0.22-0.11)));
+  });
+  // 5yr moving avg
+  const ma5 = vals.map((v,i,a) => {
+    if (i < 4) return null;
+    return Math.round(a.slice(i-4,i+1).reduce((s,x)=>s+x,0)/5);
+  });
+  chartInstances.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: years,
+      datasets: [
+        {label:'Annual RF (mm)', data:vals, backgroundColor:vals.map(v=>v>base?'rgba(0,212,255,0.45)':'rgba(240,68,68,0.3)'), borderColor:vals.map(v=>v>base?'#00d4ff':'#f04444'), borderWidth:1, borderRadius:3},
+        {label:'LPA', data:Array(years.length).fill(base), type:'line', borderColor:'#f5a623', borderWidth:1.5, borderDash:[5,5], pointRadius:0, fill:false},
+        {label:'5-Yr MA', data:ma5, type:'line', borderColor:'#1de4a0', borderWidth:2, pointRadius:0, fill:false, tension:0.4}
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{duration:900},
+      plugins:{legend:{labels:{color:textColor,font:{family:'DM Mono',size:9},boxWidth:12}}},
+      scales:{
+        x:{grid:{color:gridColor},ticks:{color:textColor,font:{size:8},maxTicksLimit:14}},
+        y:{grid:{color:gridColor},ticks:{color:textColor,font:{size:9},callback:v=>v+'mm'}}
+      }
+    }
+  });
+}
+
+function buildMonthlyChart(data, stateName) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const {gridColor, textColor} = getChartColors();
+  const pre = [0,0,1,1,1,0,0,0,0,0,0,0].map(v=>v?data.premonsoonRF/3:0);
+  const mon = [0,0,0,0,0,1,1,1,1,0,0,0].map(v=>v?data.monsoonRF/4:0);
+  const post = [0,0,0,0,0,0,0,0,0,1,1,1].map(v=>v?data.postmonsoonRF/3:0);
+  const winter = [1,1,0,0,0,0,0,0,0,0,0,0].map(v=>v?data.lpa*0.025:0);
+  const monthRand = seededRandom(stateName + 'monthly');
+  const vals = months.map((_,i) => Math.round((pre[i]+mon[i]+post[i]+winter[i])*(0.85+monthRand()*0.3)));
+  chartInstances.monthly = new Chart(document.getElementById('monthlyChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: months,
+      datasets: [{
+        label:'Monthly Avg (mm)',
+        data: vals,
+        backgroundColor: vals.map((v,i) => i>=5&&i<=8 ? 'rgba(0,212,255,0.6)' : i>=2&&i<=4 ? 'rgba(245,166,35,0.5)' : i>=9&&i<=11 ? 'rgba(29,228,160,0.5)' : 'rgba(100,150,200,0.4)'),
+        borderColor: vals.map((v,i) => i>=5&&i<=8 ? '#00d4ff' : i>=2&&i<=4 ? '#f5a623' : i>=9&&i<=11 ? '#1de4a0' : '#6496c8'),
+        borderWidth:1.5, borderRadius:4
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{duration:700},
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{grid:{color:gridColor},ticks:{color:textColor,font:{size:10}}},
+        y:{grid:{color:gridColor},ticks:{color:textColor,font:{size:9},callback:v=>v+'mm'}}
+      }
+    }
+  });
+}
+
+function buildAnomalyChart(data,stateName) {
+  const rand = seededRandom(stateName + 'anomaly');
+  const years = [];
+  for (let y = 1990; y <= 2025; y++) years.push(y);
+  const {gridColor, textColor} = getChartColors();
+  const anomalies = years.map((y,i) => {
+    // const noise = Math.sin(i*0.9)*80 + (Math.random()*100-50);
+    const noise = Math.sin(i*0.9)*80 + (rand()*100-50);
+    return Math.round(noise);
+  });
+  chartInstances.anomaly = new Chart(document.getElementById('anomalyChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: years,
+      datasets: [{
+        label:'Anomaly from LPA (mm)',
+        data: anomalies,
+        backgroundColor: anomalies.map(v=>v>=0?'rgba(0,212,255,0.55)':'rgba(240,68,68,0.45)'),
+        borderColor: anomalies.map(v=>v>=0?'#00d4ff':'#f04444'),
+        borderWidth:1, borderRadius:2
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{duration:900},
+      plugins:{legend:{labels:{color:textColor,font:{family:'DM Mono',size:9}}}},
+      scales:{
+        x:{grid:{color:gridColor},ticks:{color:textColor,font:{size:8},maxTicksLimit:14}},
+        y:{grid:{color:gridColor},ticks:{color:textColor,font:{size:9},callback:v=>(v>=0?'+':'')+v+'mm'},
+          title:{display:true,text:'Deviation from LPA (mm)',color:textColor,font:{size:10}}}
+      }
+    }
+  });
+}
+
+function buildSeasonPieChart(data) {
+  const {textColor} = getChartColors();
+  chartInstances.pie = new Chart(document.getElementById('seasonPieChart').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Pre-Monsoon (Mar–May)', 'SW Monsoon (Jun–Sep)', 'Post-Monsoon (Oct–Dec)', 'Winter (Jan–Feb)'],
+      datasets: [{
+        data: [data.premonsoonPct, data.monsoonPct, data.postmonsoonPct, 100-data.premonsoonPct-data.monsoonPct-data.postmonsoonPct],
+        backgroundColor: ['rgba(245,166,35,0.7)','rgba(0,212,255,0.7)','rgba(29,228,160,0.7)','rgba(100,150,200,0.4)'],
+        borderColor: ['#f5a623','#00d4ff','#1de4a0','#6496c8'],
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{duration:800, animateRotate:true},
+      plugins:{
+        legend:{position:'bottom',labels:{color:textColor,font:{family:'DM Mono',size:10},padding:12,boxWidth:14}}
+      }
+    }
+  });
+}
+
+function buildSeasonTrendChart(data,stateName) {
+  const rand = seededRandom(stateName + 'season');
+  const years = [];
+  for (let y = 1990; y <= 2025; y++) years.push(y);
+  const {gridColor, textColor} = getChartColors();
+  chartInstances.seasonTrend = new Chart(document.getElementById('seasonTrendChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: years,
+      datasets: [
+        {label:'Pre-Monsoon', data:years.map((_,i)=>Math.round(data.premonsoonRF*(0.88+i*0.012+rand()*0.1))), borderColor:'#f5a623', backgroundColor:'rgba(245,166,35,0.07)', fill:true, tension:0.4, borderWidth:2, pointRadius:2},
+        {label:'Monsoon', data:years.map((_,i)=>Math.round(data.monsoonRF*(0.9+i*0.013+rand()*0.11))), borderColor:'#00d4ff', backgroundColor:'rgba(0,212,255,0.07)', fill:true, tension:0.4, borderWidth:2, pointRadius:2},
+        {label:'Post-Monsoon', data:years.map((_,i)=>Math.round(data.postmonsoonRF*(0.87+i*0.018+rand()*0.1))), borderColor:'#1de4a0', backgroundColor:'rgba(29,228,160,0.07)', fill:true, tension:0.4, borderWidth:2, pointRadius:2},
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{duration:900},
+      plugins:{legend:{labels:{color:textColor,font:{family:'DM Mono',size:9},boxWidth:12}}},
+      scales:{
+        x:{grid:{color:gridColor},ticks:{color:textColor,font:{size:8},maxTicksLimit:10}},
+        y:{grid:{color:gridColor},ticks:{color:textColor,font:{size:9},callback:v=>v+'mm'}}
+      }
+    }
+  });
+}
+
+// ─────────────────────────
+//  DISTRICT TABLE SORT
+// ─────────────────────────
+let currentStateDistricts = [];
+let sortCol = 0, sortAsc = true;
+function sortTable(col) {
+  if (sortCol === col) sortAsc = !sortAsc;
+  else { sortCol = col; sortAsc = col > 0 ? false : true; }
+  renderDistrictTable(currentStateDistricts);
+}
+
+document.getElementById('districtSearch').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  const filtered = q ? currentStateDistricts.filter(d => d.name.toLowerCase().includes(q)) : currentStateDistricts;
+  renderDistrictTable(filtered);
+});
+
+function renderDistrictTable(districts) {
+  const sorted = [...districts].sort((a,b) => {
+    let va, vb;
+    if (sortCol === 0) { va = a.name; vb = b.name; return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va); }
+    if (sortCol === 1) { va = a.rf; vb = b.rf; }
+    if (sortCol === 2) { va = (a.rf-a.lpa)/a.lpa; vb = (b.rf-b.lpa)/b.lpa; }
+    if (sortCol === 3) { va = a.monsoon; vb = b.monsoon; }
+    return sortAsc ? va - vb : vb - va;
+  });
+  const maxRF = Math.max(...districts.map(d => d.rf));
+  document.getElementById('districtTableBody').innerHTML = sorted.map(d => {
+    const pct = ((d.rf - d.lpa) / d.lpa * 100).toFixed(1);
+    const statusClass = pct > 10 ? 'status-excess' : pct < -10 ? 'status-deficient' : 'status-normal';
+    const statusText = pct > 10 ? 'Excess' : pct < -10 ? 'Deficient' : 'Normal';
+    const pctColor = pct >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<tr>
+      <td class="district-name">${d.name}</td>
+      <td><div class="rf-bar"><div class="rf-bar-track"><div class="rf-bar-fill" style="width:${(d.rf/maxRF*100).toFixed(0)}%"></div></div><span class="rf-val">${d.rf} mm</span></div></td>
+      <td style="color:${pctColor};font-weight:600">${pct>=0?'+':''}${pct}%</td>
+      <td style="color:var(--accent)">${d.monsoon} mm</td>
+      <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+      <td style="font-size:.72rem;color:${d.trend.includes('↗')?'var(--green)':d.trend.includes('↘')?'var(--red)':'var(--text3)'}">${d.trend}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─────────────────────────
+//  MAIN LOAD STATE
+// ─────────────────────────
+function loadState(stateName) {
+  const data = stateData[stateName];
+  if (!data) return;
+  document.getElementById('loadingOverlay').classList.add('active');
+  document.getElementById('loadingText').textContent = `Loading ${stateName} rainfall data...`;
+  setTimeout(() => {
+    document.getElementById('loadingOverlay').classList.remove('active');
+    const resultsArea = document.getElementById('resultsArea');
+    resultsArea.classList.add('visible');
+    resultsArea.scrollIntoView({ behavior:'smooth', block:'start' });
+
+    document.getElementById('selectedStateName').textContent = stateName;
+    document.getElementById('tableStateName').textContent = stateName;
+    document.getElementById('badgeRegion').textContent = data.region;
+    document.getElementById('badgeClimate').textContent = data.climate;
+
+    const diff = ((data.annual2024 - data.lpa)/data.lpa*100).toFixed(1);
+    const statusBadge = document.getElementById('badgeStatus');
+    statusBadge.textContent = data.status + ' ' + (diff>=0?'+':'')+diff+'%';
+    statusBadge.className = 'meta-badge ' + (data.status==='Excess'?'green':data.status==='Deficient'?'red':'amber');
+
+    initMap(data.coords[0], data.coords[1], data.zoom, stateName);
+
+    // KPI Cards
+    const deficit = parseFloat(diff);
+    document.getElementById('kpiCards').innerHTML = [
+      {label:'Annual Rainfall 2024', val:data.annual2024+' mm', sub:'Total precipitation', trend:(deficit>=0?'↑ '+deficit+'% above LPA':'↓ '+Math.abs(deficit)+'% below LPA'), tclass:deficit>=0?'trend-up':'trend-down'},
+      {label:'Long Period Average', val:data.lpa+' mm', sub:'1961–1990 IMD baseline', trend:'Standard LPA reference', tclass:'trend-neutral'},
+      {label:'SW Monsoon Season', val:data.monsoonRF+' mm', sub:data.monsoonPct+'% of annual total', trend:'↑ Jun–Sep · Primary season', tclass:'trend-up'},
+      {label:'Pre-Monsoon', val:data.premonsoonRF+' mm', sub:data.premonsoonPct+'% of annual', trend:'Mar–May average', tclass:'trend-neutral'},
+    ].map(k=>`<div class="card fade-in"><div class="card-label">${k.label}</div><div class="card-value">${k.val}</div><div class="card-sub">${k.sub}</div><div class="card-trend ${k.tclass}">${k.trend}</div></div>`).join('');
+
+    destroyCharts();
+    buildTrendChart(stateName, data);
+    buildMonthlyChart(data, stateName);
+    buildAnomalyChart(data,stateName);
+    buildSeasonPieChart(data);
+    buildSeasonTrendChart(data,stateName);
+
+    // Season cards
+    const maxS = Math.max(data.premonsoonRF, data.monsoonRF, data.postmonsoonRF);
+    document.getElementById('seasonGrid').innerHTML = `
+      <div class="season-card premonsoon fade-in">
+        <span class="season-icon">☀️</span><div class="season-name">Pre-Monsoon</div><div class="season-period">MARCH — MAY</div>
+        <div class="season-rainfall">${data.premonsoonRF} mm</div>
+        <div style="font-size:.7rem;color:var(--text3)">${data.premonsoonPct}% of annual total</div>
+        <div class="season-bar-track"><div class="season-bar-fill" style="width:${(data.premonsoonRF/maxS*100).toFixed(0)}%"></div></div>
+        <div class="season-chart-wrap"><canvas id="sChart1"></canvas></div>
+      </div>
+      <div class="season-card monsoon fade-in-2">
+        <span class="season-icon">🌧</span><div class="season-name">SW Monsoon</div><div class="season-period">JUNE — SEPTEMBER</div>
+        <div class="season-rainfall">${data.monsoonRF} mm</div>
+        <div style="font-size:.7rem;color:var(--text3)">${data.monsoonPct}% of annual total</div>
+        <div class="season-bar-track"><div class="season-bar-fill" style="width:${(data.monsoonRF/maxS*100).toFixed(0)}%"></div></div>
+        <div class="season-chart-wrap"><canvas id="sChart2"></canvas></div>
+      </div>
+      <div class="season-card postmonsoon fade-in-3">
+        <span class="season-icon">🍂</span><div class="season-name">Post-Monsoon</div><div class="season-period">OCTOBER — DECEMBER</div>
+        <div class="season-rainfall">${data.postmonsoonRF} mm</div>
+        <div style="font-size:.7rem;color:var(--text3)">${data.postmonsoonPct}% of annual total</div>
+        <div class="season-bar-track"><div class="season-bar-fill" style="width:${(data.postmonsoonRF/maxS*100).toFixed(0)}%"></div></div>
+        <div class="season-chart-wrap"><canvas id="sChart3"></canvas></div>
+      </div>
+    `;
+
+    setTimeout(() => {
+      const miniRand = seededRandom(stateName + 'mini');
+      ['sChart1','sChart2','sChart3'].forEach((id,i) => {
+        const colors = ['#f5a623','#00d4ff','#1de4a0'];
+        const bases = [data.premonsoonRF, data.monsoonRF, data.postmonsoonRF];
+        const ctx = document.getElementById(id); if (!ctx) return;
+        new Chart(ctx.getContext('2d'), {
+          type:'line',
+          data:{
+            labels:[2018,2019,2020,2021,2022,2023,2024,2025],
+            datasets:[{data:[2018,2019,2020,2021,2022,2023,2024,2025].map(()=>Math.round(bases[i]*(0.78+miniRand()*0.44))),
+              borderColor:colors[i],backgroundColor:colors[i]+'18',fill:true,tension:0.4,borderWidth:1.5,pointRadius:0}]
+          },
+          options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
+        });
+      });
+    }, 200);
+
+    // District table
+    currentStateDistricts = data.districts;
+    document.getElementById('districtSearch').value = '';
+    renderDistrictTable(currentStateDistricts);
+
+    // Events
+    document.getElementById('eventsTimeline').innerHTML = data.events.map((e,i)=>`
+      <div class="event-item" style="animation-delay:${i*0.1}s">
+        <div class="event-year">${e.year}</div>
+        <div class="event-title">${e.title}</div>
+        <div class="event-desc">${e.desc}</div>
+        <span class="event-severity ${e.sev}">${e.sev.replace('sev-','').toUpperCase()}</span>
+      </div>
+    `).join('');
+
+  }, 900);
+}
+
+// ─────────────────────────
+//  NATIONAL GRID
+// ─────────────────────────
+const natGrid = document.getElementById('nationalGrid');
+stateOverview.forEach(s => {
+  const isUp = s.trend.startsWith('+');
+  const card = document.createElement('div');
+  card.className = 'nat-card';
+  card.innerHTML = `
+    <div class="nat-card-name">${s.name}</div>
+    <div class="nat-card-rf">${s.rf} <span style="font-size:.8rem;color:var(--text2)">mm</span></div>
+    <div class="nat-card-trend" style="color:${isUp?'var(--green)':'var(--red)'}">${s.trend} vs LPA</div>
+    <div class="nat-mini-bar"><div class="nat-mini-fill" style="width:0%" data-fill="${s.fill}"></div></div>
+  `;
+  card.onclick = () => { loadState(s.name); document.getElementById('searchInput').value = s.name; document.getElementById('analyzer').scrollIntoView({behavior:'smooth'}); };
+  natGrid.appendChild(card);
+});
+
+// Animate bars on scroll
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.querySelectorAll('.nat-mini-fill').forEach(el => {
+        el.style.width = el.dataset.fill + '%';
+      });
+    }
+  });
+}, { threshold: 0.1 });
+observer.observe(natGrid);
+
+// ─────────────────────────
+//  NATIONAL CHART
+// ─────────────────────────
+(function buildNationalChart() {
+  const years = []; for (let y=1990; y<=2025; y++) years.push(y);
+  const lpa = 1169;
+  // const vals = years.map((y,i) => Math.round(lpa + Math.sin(i*0.4)*200 + (Math.random()*140-70)));
+  const natRand = seededRandom('nationalChart2025');
+  const vals = years.map((y,i) => Math.round(lpa + Math.sin(i*0.4)*200 + (natRand()*140-70)));
+  const {gridColor, textColor} = getChartColors();
+  new Chart(document.getElementById('nationalChart').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels:years,
+      datasets:[
+        {label:'All-India RF (mm)', data:vals, backgroundColor:vals.map(v=>v>lpa?'rgba(0,212,255,0.45)':'rgba(240,68,68,0.35)'), borderColor:vals.map(v=>v>lpa?'#00d4ff':'#f04444'), borderWidth:1, borderRadius:3},
+        {label:'LPA (1169 mm)', data:Array(years.length).fill(lpa), type:'line', borderColor:'#f5a623', borderWidth:1.5, borderDash:[5,5], pointRadius:0, fill:false}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:textColor,font:{family:'DM Mono',size:10}}}},
+      scales:{
+        x:{grid:{color:gridColor},ticks:{color:textColor,font:{size:9},maxTicksLimit:14}},
+        y:{grid:{color:gridColor},ticks:{color:textColor,font:{size:9},callback:v=>v+'mm'}}
+      }
+    }
+  });
+})();
+</script>
+</body>
+</html>
